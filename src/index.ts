@@ -78,6 +78,8 @@ const model = process.env.DASHSCOPE_API_KEY
 //   });
 // }
 
+const budget = { used: 0, limit: 15000 }; // Token 预算
+
 const system =
   "你是 Super Agent，一个有工具调用能力的 AI 助手。需要时主动使用工具获取信息，不要编造数据。";
 
@@ -92,11 +94,12 @@ function ask() {
 
     messages.push({ role: "user", content: trimmed });
 
-    await agentLoop(model, tools, messages, system);
+    await agentLoop(model, tools, messages, system, budget);
 
     ask();
   });
 }
 
 console.log('Super Agent v0.2 — Agent Loop (type "exit" to quit)\n');
+
 ask();

@@ -26,6 +26,7 @@ export async function agentLoop(
     let fullText = "";
 
     for await (const part of result.fullStream) {
+      // fullStream 是ai库生成的一个水桶，里面装的是模型的输出，并且当模型调用完毕后会自动的将结果添加到水桶中
       switch (part.type) {
         case "text-delta":
           process.stdout.write(part.text);
