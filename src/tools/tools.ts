@@ -1,6 +1,13 @@
-import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  statSync,
+  existsSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import type { ToolDefinition } from "./tool-registry";
+import fg from "fast-glob";
 
 export const readFileTool: ToolDefinition = {
   name: "read_file",
@@ -79,8 +86,103 @@ export const listDirectoryTool: ToolDefinition = {
   },
 };
 
+// 编辑文件工具
+export const editFileTool: ToolDefinition = {
+  name: "edit_file",
+  description:
+    "精确替换文件中的指定内容，用 old_string 定位要替换的文本，用 new_string 替换它。不是全量覆写，只改指定的部分",
+  parameters: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "文件路径",
+      },
+      old_string: {
+        type: "string",
+        description: "要被替换的原始文本（必须精确匹配）",
+      },
+      new_string: {
+        type: "string",
+        description: "替换后的新文本",
+      },
+    },
+    required: ["path", "old_string", "new_string"],
+    additionalProperties: false,
+  },
+  isConcurrencySafe: false, // 编辑操作不能并发
+  isReadOnly: false,
+  execute: async ({
+    path,
+    old_string,
+    new_string,
+  }: {
+    path: string;
+    old_string: string;
+    new_string: string;
+  }) => {
+    const resolved = resolve(path);
+    if (!existsSync(resolved)) return `文件不存在: ${path}`;
+
+    const content = readFileSync(resolved, "utf-8");
+    const count = content.split(old_string).length - 1;
+
+    if (count === 0) {
+      return `未找到匹配的内容。请检查 old_string 是否与文件中的文本完全一致（包括空格和换行）`;
+    }
+
+    if (count > 1) {
+      return `找到 ${count} 处匹配，请提供更多上下文让 old_string 唯一`;
+    }
+
+    const updated = content.replace(old_string, new_string);
+    writeFileSync(resolved, updated, "utf-8");
+    return `已替换 ${path} 中的内容（${old_string} ➡️ ${new_string}）`;
+  },
+};
+
+// 全局搜索工具
+export const globTool: ToolDefinition = {
+  name: "glob",
+  description:
+    '按模式搜索文件。支持 * 和 ** 通配符，如 "src/**/*.ts" 匹配 src 下所有 TypeScript 文件',
+  parameters: {
+    type: "object",
+    properties: {
+      pattern: {
+        type: "string",
+        description: '搜索模式，如 "**/*.ts"、"src/*.json"',
+      },
+      path: { type: "string", description: "搜索起始目录，默认当前目录" },
+    },
+    required: ["pattern"],
+    additionalProperties: false,
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  execute: async ({
+    pattern,
+    path = ".",
+  }: {
+    pattern: string;
+    path?: string;
+  }) => {
+    const results = await fg(pattern, {
+      cwd: resolve(path),
+      ignore: ["node_modules/**", ".git/**"],
+      dot: false,
+      onlyFiles: true,
+      followSymbolicLinks: false,
+    });
+    if (results.length === 0) return `没有找到匹配 "${pattern}" 的文件`;
+    return results.sort().join("\n");
+  },
+};
+
 export const allTools: ToolDefinition[] = [
   readFileTool,
   writeFileTool,
   listDirectoryTool,
+  editFileTool,
+  globTool,
 ];
