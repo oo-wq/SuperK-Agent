@@ -87,7 +87,7 @@ export function createMockModel() {
   return {
     specificationVersion: "v4" as const,
     provider: "mock",
-    modelId: "mock-model",
+    modeId: "mock-model",
 
     async doGenerate({ prompt }: any) {
       return {

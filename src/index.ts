@@ -4,16 +4,18 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createMockModel } from "./mock-model";
 import { createInterface } from "readline";
 import { weatherTool } from "./tools/utility-tools";
-import { agentLoop } from "./agent/loop";
+import { agentLoop, type BudgetState } from "./agent/loop";
 
 const tools = { get_weather: weatherTool };
 const messages: ModelMessage[] = [];
 const rl = createInterface({
+  // 创建 readline 接口, 用于从命令行读取用户输入
   input: process.stdin,
   output: process.stdout,
 });
 
 const qwen = createOpenAI({
+  // 创建 OpenAI 模型, 用于生成文本
   baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
   apiKey: process.env.DASHSCOPE_API_KEY,
 });
@@ -78,7 +80,7 @@ const model = process.env.DASHSCOPE_API_KEY
 //   });
 // }
 
-const budget = { used: 0, limit: 15000 }; // Token 预算
+const budget: BudgetState = { used: 0, limit: 15000 }; // token 预算
 
 const system =
   "你是 Super Agent，一个有工具调用能力的 AI 助手。需要时主动使用工具获取信息，不要编造数据。";
@@ -100,6 +102,7 @@ function ask() {
   });
 }
 
-console.log('Super Agent v0.2 — Agent Loop (type "exit" to quit)\n');
+console.log('Super Agent v0.3 — Agent Loop (type "exit" to quit)\n');
+console.log('试试输入："测试死循环"');
 
 ask();
