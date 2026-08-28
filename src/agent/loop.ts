@@ -1,4 +1,5 @@
 import { streamText, type ModelMessage } from "ai";
+import { ToolRegistry } from "../tools/tool-registry";
 import {
   detect,
   resetHistory,
@@ -17,7 +18,7 @@ export interface BudgetState {
 
 export async function agentLoop(
   model: any,
-  tools: any,
+  registry: ToolRegistry,
   messages: ModelMessage[],
   system: string,
   budget: BudgetState,
@@ -42,7 +43,7 @@ export async function agentLoop(
       try {
         const result = streamText({
           model,
-          tools,
+          tools: registry.toAISDKFormat(),
           messages,
           system,
           maxRetries: 0, // 不配置重试，就只会跑一次
