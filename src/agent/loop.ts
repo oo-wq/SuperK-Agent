@@ -1,12 +1,12 @@
 import { streamText, type ModelMessage } from "ai";
-import { ToolRegistry } from "../tools/tool-registry";
+import { ToolRegistry } from "../tools/tool-registry.js";
 import {
   detect,
   resetHistory,
   recordCall,
   recordResult,
-} from "./loop-detection";
-import { isRetryable, calculateDelay, sleep } from "./retry";
+} from "./loop-detection.js";
+import { isRetryable, calculateDelay, sleep } from "./retry.js";
 
 const MAX_STEPS = 15; // 最大循环次数
 const MAX_RETRIES = 3; // 最大重试次数

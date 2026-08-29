@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git subtree *)"
+      "Bash(git subtree *)",
+      "Bash(pnpm --version)",
+      "Bash(node -e \"const p=require\\('ai/package.json'\\);console.log\\('ai main:',p.main,'exports:',JSON.stringify\\(p.exports\\).slice\\(0,120\\)\\)\")",
+      "Bash(node -e \"const p=require\\('@ai-sdk/openai/package.json'\\);console.log\\('openai main:',p.main\\)\")"
     ]
   }
 }
