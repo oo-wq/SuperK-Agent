@@ -91,3 +91,14 @@ agent: [调用get_waether 工具] -> 南昌今天晴，30摄氏度，东南风2�
       
 
 # Agent 接入MCP
+   1. 接入 GitHub MCP 服务器
+ - MCP的通信协议是 JSON-RPC 2.0，传输方式支持 stdio 和 Streamable HTTP。我们启用 stdio 本地进程，通过标准的输入输出来收发消息
+
+ - 我们的Agent (client) 启动一个对接 MCP Server 进程，通过 stdio 发JSON消息给 github mcp server。github mcp server 会向我们的进程中返回JSON消息，我们通过 stdout 读取返回的消息
+
+  1. 握手 --- Client 发 initialize method 给 Server，Server 会返回一个 JSON-RPC 2.0 的 response，回复它支持的能力
+  2. 发现工具 --- Client 发 tools/list method 给 Server，Server 会返回所有的工具名称、描述、参数 schema 等信息
+  3. 调用工具 --- 模型决定调用某个MCP工具，Client 发 tools/call method 给 Server，Server 会执行该工具，返回工具的执行结果
+
+
+  

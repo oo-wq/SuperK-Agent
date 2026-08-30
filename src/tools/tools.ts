@@ -5,12 +5,12 @@ import {
   statSync,
   existsSync,
 } from "node:fs";
-import { join, relative, resolve, extname } from "node:path";
-import type { ToolDefinition } from "./tool-registry.js";
+import { join, resolve, relative, extname } from "node:path";
+import type { ToolDefinition } from "./tool-registry";
 import fg from "fast-glob";
 import { execSync } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { pickSearchTool } from "./search-tool";
+import { pickSearchTool, webFetchTool } from "./search-tool";
 
 export const readFileTool: ToolDefinition = {
   name: "read_file",
@@ -56,7 +56,7 @@ export const writeFileTool: ToolDefinition = {
   isReadOnly: false,
   execute: async ({ path, content }: { path: string; content: string }) => {
     writeFileSync(resolve(path), content, "utf-8");
-    return `已写入 ${content.length}个字符到${path} `;
+    return `已写入 ${content.length} 个字符到 ${path}`;
   },
 };
 
@@ -89,11 +89,11 @@ export const listDirectoryTool: ToolDefinition = {
   },
 };
 
-// 编辑文件工具
+// 编辑文件
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
   description:
-    "精确替换文件中的指定内容，用 old_string 定位要替换的文本，用 new_string 替换它。不是全量覆写，只改指定的部分",
+    "精确替换文件中的制定内容，用 old_string 定位要替换的文本，用 new_string 替换它。不是全量覆写，只改你指定的部分",
   parameters: {
     type: "object",
     properties: {
@@ -140,11 +140,11 @@ export const editFileTool: ToolDefinition = {
 
     const updated = content.replace(old_string, new_string);
     writeFileSync(resolved, updated, "utf-8");
-    return `已替换 ${path} 中的内容（${old_string} ➡️ ${new_string}）`;
+    return `已替换 ${path} 中的内容（${old_string} ➡️  ${new_string} 字符）`;
   },
 };
 
-// 全局搜索工具
+// 全局搜索
 export const globTool: ToolDefinition = {
   name: "glob",
   description:
@@ -470,4 +470,5 @@ export const allTools: ToolDefinition[] = [
   fetchUrlTool,
   startPreviewTool,
   pickSearchTool(),
+  webFetchTool,
 ];

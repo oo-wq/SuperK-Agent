@@ -1,9 +1,10 @@
 import type { ToolDefinition } from "./tool-registry";
+import TurndownService from "turndown";
 
 // Tavily 搜索引擎
 export const tavilySearchTool: ToolDefinition = {
   name: "web_search",
-  description: "搜索互联网获取最新信息，返回相关网页的标题、链接和内容摘要",
+  description: "搜索互联网获取最新信息。返回相关网页的标题、链接和内容摘要",
   parameters: {
     type: "object",
     properties: {
@@ -13,7 +14,7 @@ export const tavilySearchTool: ToolDefinition = {
       },
       max_results: {
         type: "number",
-        description: "返回的最大结果数量,默认5个",
+        description: "返回的最大结果数量, 默认5个",
       },
     },
     required: ["query"],
@@ -29,9 +30,9 @@ export const tavilySearchTool: ToolDefinition = {
     max_results?: number;
   }) => {
     const apiKey = process.env.TAVILY_API_KEY;
-    if (!apiKey) return `[web_search] 未配置 TAVILY_API_KEY,请在 .env 中配置`;
+    if (!apiKey) return `[web_search] 未配置 TAVILY_API_KEY，请在 .env 中配置`;
 
-    const res = await fetch(`https://api.tavily.com/search`, {
+    const res = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -44,12 +45,14 @@ export const tavilySearchTool: ToolDefinition = {
       }),
     });
 
-    if (!res.ok) return `[web_search] Tavily 请求失败,状态码:${res.status}`;
+    if (!res.ok) return `[web_search] Tavily 请求失败，状态码 ${res.status}`;
 
     const data = (await res.json()) as any;
     const lines: string[] = [];
 
-    if (data.answer) lines.push(`## AI 摘要\n${data.answer}\n`);
+    if (data.answer) {
+      lines.push(`## AI 摘要\n${data.answer}\n`);
+    }
 
     for (const r of data.results || []) {
       lines.push(`### ${r.title}`);
@@ -119,6 +122,50 @@ export const serperSearchTool: ToolDefinition = {
     return lines.join("\n") || "没有找到相关结果";
   },
 };
+// 为 Serper 搜索引擎添加web_fetch
+export const webFetchTool: ToolDefinition = {
+  name: "web_fetch",
+  description: "抓取指定 URL 的网页内容，转换为 Markdown 格式",
+  parameters: {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "完整 URL" },
+    },
+    required: ["url"],
+  },
+  isConcurrencySafe: true,
+  isReadOnly: true,
+  maxResultChars: 3000,
+  execute: async ({ url }: { url: string }) => {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperAgent/1.0)" },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return `抓取失败: HTTP ${res.status}`;
+      const html = await res.text();
+      return htmlToMarkdown(html);
+    } catch (err: any) {
+      return `抓取失败: ${err.message}`;
+    }
+  },
+};
+// HTML 转换为 Markdown 格式
+const turndownService = new TurndownService({
+  headingStyle: "atx",
+  codeBlockStyle: "fenced",
+});
+turndownService.remove([
+  "style",
+  "script",
+  "header",
+  "nav",
+  "footer",
+  "iframe",
+]);
+function htmlToMarkdown(html: string) {
+  return turndownService.turndown(html);
+}
 
 export function pickSearchTool(): ToolDefinition {
   if (process.env.TAVILY_API_KEY) return tavilySearchTool;
