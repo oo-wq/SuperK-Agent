@@ -10,6 +10,8 @@ export interface ToolDefinition {
   isConcurrencySafe?: boolean; // 能否并行
   isReadOnly?: boolean; // 是否只读
   maxResultChars?: number; // 最大结果字符数
+  shouldDefer?: boolean; // 是否延迟加载
+  searchHint?: string; // 搜索提示
 }
 
 const DEFAULT_MAX_RESULT_CHARS = 3000; // 工具执行允许的最大输出字符数
@@ -22,6 +24,9 @@ export class ToolRegistry {
   private exclusiveLock = false; // 当前是否有独占锁的持有者
   private concurrentCount = 0; // 当前共享锁的持有数
   private waitQueue: Array<() => void> = []; // 等待队列, 阻塞等待中的 resolve 函数
+
+  // 已发现的工具列表
+  private discoveredTools = new Set<string>(); // 已发现的工具列表，用于避免重复注册
 
   register(...tools: ToolDefinition[]): void {
     // 将来在任何地方定义的工具，都直接通过register方法注册，被存入tools列表
@@ -156,6 +161,23 @@ export class ToolRegistry {
       };
     }
     return result;
+  }
+
+  // 搜索工具
+  searchTools(query: string): ToolDefinition[] {
+    const q = query.trim()  // "mcp__github__list__issues, mcp__github__get__issue"
+    const results: ToolDefinition[] = []
+    // 去 Map 对象中搜索哪个值 (对象) 拥有 searchHint 属性，且 searchHint 包含 q 字符串
+    const names = q.includes(',') ? q.split(',').map(n => n.trim()).filter(Boolean) : [q]
+    for (const name of names) {
+      const tool = this.tools.get(name) // 去 Map 对象中读取 name 对应的工具
+      if (tool && tool.name !== 'tool_search') {
+        results.push(tool)
+        // 记录被搜到的延迟工具
+        this.discoveredTools.add(tool.name)
+      }
+    }
+    return results
   }
 }
 

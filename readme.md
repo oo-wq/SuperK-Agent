@@ -101,4 +101,14 @@ agent: [调用get_waether 工具] -> 南昌今天晴，30摄氏度，东南风2�
   3. 调用工具 --- 模型决定调用某个MCP工具，Client 发 tools/call method 给 Server，Server 会执行该工具，返回工具的执行结果
 
 
-  
+# ToolSearch 延迟加载
+ - 把不常用的工具藏起来，模型需要的时候才按需加载，按需发现。将Prompt中的工具数量从几十个减少到几个，同时又不损失Agent的执行能力。
+
+  - 工具分类:
+   1. 核心工具: 几乎每次都用得到的工具，Read、Write、Edit、Bash、Glob、Grep
+   2. 低频工具: 偶尔需要的，直接打上标记 shouldDefer: true，比如 WebSearch，NotionSearch，所有MCP接入的工具
+
+   - ClaudeCode 细节: 工具被标记为 shouldDefer: true，但是这些延迟工具的 Schema 如果没有超过上下文窗口的 10%，那依然不延迟加载
+
+   - 打造一个元工具: tool_search:
+     用户输入 -> Agent -> LLM -> LLM 发现无法处理问题 Agent就调用 tool_search 工具 -> 找到了需要的工具就执行 -> 将执行结果返回给 LLM -> LLM 继续回复

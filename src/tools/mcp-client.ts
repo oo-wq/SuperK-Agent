@@ -36,7 +36,13 @@ export class MCPClient {
   }
 
   async connect(): Promise<void> {
-    this.process = spawn(this.command, this.args, {
+    // Windows 上命令是 .cmd/.exe 文件，spawn 无法直接启动（报 ENOENT/EINVAL），
+    // 需要显式用 cmd.exe /c 包装；Linux/macOS 直接 spawn 即可。
+    const isWindows = process.platform === "win32";
+    const command = isWindows ? "cmd.exe" : this.command;
+    const args = isWindows ? ["/c", this.command, ...this.args] : this.args;
+
+    this.process = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"], // 三个pipe：指的是标准输入、标准输出、标准错误输出都通过管道传递
       env: { ...process.env, ...this.env }, // 主进程环境变量传给子进程，用于访问环境变量
     });
@@ -44,6 +50,11 @@ export class MCPClient {
     this.process.on("error", (error) => {
       // 子进程错误事件
       console.error(` [MCP] 进程启动失败：${error.message}`);
+      // 启动失败时立刻拒绝所有待处理请求，避免它们一直等到超时
+      for (const p of this.pending.values()) {
+        p.reject(new Error(`MCP 进程启动失败: ${error.message}`));
+      }
+      this.pending.clear();
     });
 
     this.process.stderr?.on("data", () => {});
