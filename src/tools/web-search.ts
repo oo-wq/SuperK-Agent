@@ -1,4 +1,4 @@
-import type { ToolDefinition } from "./tool-registry";
+import type { ToolDefinition } from "./registry";
 import TurndownService from "turndown";
 
 // Tavily 搜索引擎
@@ -163,6 +163,7 @@ turndownService.remove([
   "footer",
   "iframe",
 ]);
+
 function htmlToMarkdown(html: string) {
   return turndownService.turndown(html);
 }
