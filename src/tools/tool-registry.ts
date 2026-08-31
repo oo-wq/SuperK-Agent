@@ -125,23 +125,25 @@ export class ToolRegistry {
 
   toAISDKFormat(): Record<string, any> {
     const result: Record<string, any> = {};
-    for (const [name, tool] of this.tools) {
+    const activeTools = this.getActiveTools();
+
+    for (const tool of activeTools) {
       const maxChars = tool.maxResultChars;
       const executeFn = tool.execute;
       const isSafe = tool.isConcurrencySafe === true;
       const registry = this;
 
-      result[name] = {
+      result[tool.name] = {
         description: tool.description,
         inputSchema: jsonSchema(tool.parameters as any),
         execute: async (input: any) => {
           // 在真正执行前，先按 isConcurrencySafe 来获取锁
           if (isSafe) {
             await registry.acquireConcurrent();
-            console.log(` [并发] ${name} 获取共享锁`);
+            console.log(` [并发] ${tool.name} 获取共享锁`);
           } else {
             await registry.acquireExclusive();
-            console.log(` [串行] ${name} 获得独占锁，等待其他工具完成`);
+            console.log(` [串行] ${tool.name} 获得独占锁，等待其他工具完成`);
           }
 
           try {
@@ -165,19 +167,50 @@ export class ToolRegistry {
 
   // 搜索工具
   searchTools(query: string): ToolDefinition[] {
-    const q = query.trim()  // "mcp__github__list__issues, mcp__github__get__issue"
-    const results: ToolDefinition[] = []
+    const q = query.trim(); // "mcp__github__list__issues, mcp__github__get__issue"
+    const results: ToolDefinition[] = [];
     // 去 Map 对象中搜索哪个值 (对象) 拥有 searchHint 属性，且 searchHint 包含 q 字符串
-    const names = q.includes(',') ? q.split(',').map(n => n.trim()).filter(Boolean) : [q]
+    const names = q.includes(",")
+      ? q
+          .split(",")
+          .map((n) => n.trim())
+          .filter(Boolean)
+      : [q];
     for (const name of names) {
-      const tool = this.tools.get(name) // 去 Map 对象中读取 name 对应的工具
-      if (tool && tool.name !== 'tool_search') {
-        results.push(tool)
+      const tool = this.tools.get(name); // 去 Map 对象中读取 name 对应的工具
+      if (tool && tool.name !== "tool_search") {
+        results.push(tool);
         // 记录被搜到的延迟工具
-        this.discoveredTools.add(tool.name)
+        this.discoveredTools.add(tool.name);
       }
     }
-    return results
+    return results;
+  }
+
+  // 可以被添加进 Prompt 中的工具
+  getActiveTools(): ToolDefinition[] {
+    return this.getAll().filter((tool) => {
+      if (tool.shouldDefer && !this.discoveredTools.has(tool.name)) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // 生成延迟工具的名字列表
+  getDeferredToolSummary(): string {
+    const deferred = this.getAll().filter((tool) => {
+      return tool.shouldDefer && !this.discoveredTools.has(tool.name);
+    });
+
+    if (deferred.length === 0) return "";
+
+    const lines = deferred.map((t) => {
+      const hint = t.searchHint ? ` — ${t.searchHint}` : "";
+      return `  - ${t.name}${hint}`; 
+    });
+
+    return `\n以下工具可用，但需要先通过 tool_search 搜索获取完整定义：\n${lines.join("\n")}`;
   }
 }
 

@@ -112,3 +112,5 @@ agent: [调用get_waether 工具] -> 南昌今天晴，30摄氏度，东南风2�
 
    - 打造一个元工具: tool_search:
      用户输入 -> Agent -> LLM -> LLM 发现无法处理问题 Agent就调用 tool_search 工具 -> 找到了需要的工具就执行 -> 将执行结果返回给 LLM -> LLM 继续回复
+
+   - 核心工具全量携带进Prompt，延迟工具也要将自己的名字和能搜到它的关键词携带进Prompt
