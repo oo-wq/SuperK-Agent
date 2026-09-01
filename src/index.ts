@@ -5,9 +5,17 @@ import { createMockModel } from "./mock-model";
 import { createInterface } from "readline";
 import { allTools } from "./tools/index";
 import { type ToolDefinition, ToolRegistry } from "./tools/registry";
-import { agentLoop, type BudgetState } from "./agent/loop";
+import { agentLoop } from "./agent/loop";
 import { MCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";
+import {
+  coreRules,
+  toolGuide,
+  deferredTools,
+  sessionContext,
+  PromptBuilder,
+  type PromptContext,
+} from "./context/prompt-builder";
 
 const qwen = createOpenAI({
   // 创建 OpenAI 模型, 用于生成文本
@@ -104,22 +112,22 @@ async function main() {
     console.log(`[session] 新回话`);
   }
 
-  const allCount = registry.getAll().length;
-  const activeTools = registry.getActiveTools();
-  const estimate = registry.countTokensEstimate();
-  console.log(`\n===工具统计===`);
-  console.log(`总工具数: ${allCount}`);
-  console.log(`活跃工具数: ${activeTools.length}`);
-  console.log(`延迟工具数: ${allCount - activeTools.length}`);
-  console.log(
-    `估算token数: ~${estimate.active}(活跃) + ~${estimate.deferred}(延迟,不占prompt)`,
-  );
+  // Prompt Pipe 组装 system prompt
+  const builder = new PromptBuilder();
+  builder.pipe("coreRules", coreRules());
+  builder.pipe("toolGuide", toolGuide());
+  builder.pipe("deferredTools", deferredTools());
+  builder.pipe("sessionContext", sessionContext());
 
-  const deferredSummary = registry.getDeferredToolSummary(); /// 获取延迟工具摘要
-  const SYSTEM = `你是 Super Agent，一个有工具调用能力的 AI 助手。
-你有内置工具和 MCP 工具可用。
-如果你需要的工具不在当前列表中，使用 tool_search 工具搜索可用工具。
-回答要简洁直接。${deferredSummary}`;
+  const promptCtx: PromptContext = {
+    toolCount: registry.getActiveTools().length, // 活跃工具数
+    deferredToolSummary: registry.getDeferredToolSummary(), // 延迟工具摘要
+    sessionMessageCount: messages.length, // 会话消息数
+    sessionId, // 会话ID
+  };
+
+  const SYSTEM = builder.build(promptCtx);
+  builder.debug(promptCtx);
 
   const rl = createInterface({
     // 创建 readline 接口, 用于从命令行读取用户输入

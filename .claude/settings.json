@@ -17,7 +17,11 @@
       "Bash(corepack --version)",
       "Bash(npm config *)",
       "Bash(npm --version)",
-      "Bash(npm help *)"
+      "Bash(npm help *)",
+      "Bash(cd \"d:/AI全栈/Agent/personal-agent\" && printf '\\\\n## Session data（运行时对话历史）\\\\n.sessions/\\\\n' >> .gitignore && git add package.json .gitignore && git commit -m \"chore\\(scripts\\): 新增 continue 脚本并忽略会话数据目录\" && echo \"---PUSH---\" && git push origin master)"
+    ],
+    "additionalDirectories": [
+      "d:\\AI全栈\\Agent\\personal-agent"
     ]
   }
 }
