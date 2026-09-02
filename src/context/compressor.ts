@@ -36,7 +36,7 @@ const CLEARABLE_TOOLS = new Set([
 ]);
 const KEEP_RECENT_TOOL_RESULT = 3; // 保留最近3个工具调用结果
 
-// 只将工具调用的结果输出压缩为[tool result cleared]
+// 1. 只将工具调用的结果输出压缩为[tool result cleared]
 export function microcompact(messages: ModelMessage[]) {
   // 找到所有工具的调用的索引位置
   const toolResultIndices: number[] = [];
@@ -74,7 +74,7 @@ export function microcompact(messages: ModelMessage[]) {
   return { messages: result, cleared };
 }
 
-// LLM摘要压缩
+// 2. LLM摘要压缩
 const COMPRESS_PROMPT = `你是一个对话压缩系统。你的任务是把 Agent 和用户之间的
 对话历史压缩成一份结构化摘要，确保后续对话能够无缝继续。
 
