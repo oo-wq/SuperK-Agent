@@ -7,10 +7,11 @@ import {
 } from "./loop-detection";
 import { isRetryable, calculateDelay, sleep } from "./retry";
 import { ToolRegistry } from "../tools/registry";
+import { type UsageTracker, normalizeUsage } from "../usage/tracker";
 
 const MAX_STEPS = 15; // 最大循环次数
 const MAX_RETRIES = 3; // 最大重试次数
-const TOKEN_BUDGET = 50000; // token 预算
+const TOKEN_BUDGET = 150000; // token 预算
 
 export interface BudgetState {
   used: number;
@@ -22,8 +23,9 @@ export async function agentLoop(
   registry: ToolRegistry,
   messages: ModelMessage[],
   system: string,
+  tracker?: UsageTracker,
 ) {
-  let step = 0;
+  let step = 0; // 当前这轮的循环次数
   let totalTokens = 0; // 总token数
 
   resetHistory(); // 重置工具执行的历史记录
@@ -49,6 +51,9 @@ export async function agentLoop(
           system,
           maxRetries: 0, // 不配置重试，就只会跑一次
           onError: () => {},
+          providerOptions: {
+            openai: { parallelCalls: true },
+          },
           // 不配置 stopwhen，就只会跑一次
         });
 
@@ -85,7 +90,13 @@ export async function agentLoop(
               break;
 
             case "tool-result":
-              console.log(`  [结果: ${JSON.stringify(part.output)}]`);
+              const output =
+                typeof part.output === "string"
+                  ? part.output
+                  : JSON.stringify(part.output);
+              const preview =
+                output.length > 120 ? output.slice(0, 120) + "..." : output;
+              console.log(`  [结果: ${part.toolName} ${preview}]`);
               // 记录工具调用结果指纹
               if (lastToolCall) {
                 recordResult(
@@ -99,7 +110,7 @@ export async function agentLoop(
         }
 
         stepResponse = await result.response;
-        stepUsage = await result.usage;
+        stepUsage = await result.usage; // 让大模型
         break;
       } catch (error) {
         if (attempt > MAX_RETRIES || !isRetryable(error as Error)) throw error;
@@ -123,23 +134,34 @@ export async function agentLoop(
 
     messages.push(...stepResponse!.messages);
 
-    // Token 预算追踪：记录当前这轮的token用量 (输入+输出 的token计算已经在 streamText 中做了)
-    const inp =
-      typeof stepUsage?.inputTokens === "number"
-        ? stepUsage.inputTokens
-        : ((stepUsage?.inputTokens as any)?.total ?? 0);
-    const out =
-      typeof stepUsage?.outputTokens === "number"
-        ? stepUsage.outputTokens
-        : ((stepUsage?.outputTokens as any)?.total ?? 0);
-    totalTokens += inp + out;
-    const pct = Math.round((totalTokens / TOKEN_BUDGET) * 100);
-    console.log(
-      ` [Token 预算] 已使用 ${totalTokens} / ${TOKEN_BUDGET}，(${pct}%)`,
-    );
+    // 把 usage 喂给 tracker，tracker 内部会按四类 token 分别累计并计算 cost
+    const norm = normalizeUsage(stepUsage); // 把从 AI SDK 返回的 usage 对象规范成四类token
+    const stepRecord = tracker?.record(model?.modelId || "", norm);
+    totalTokens +=
+      norm.inputTokens +
+      norm.outputTokens +
+      norm.cacheReadTokens +
+      norm.cacheWriteTokens;
+    // cache 命中时打印简洁状态
+    if (stepRecord && (norm.cacheReadTokens > 0 || norm.cacheWriteTokens > 0)) {
+      const tag = norm.cacheReadTokens > 0 ? `cache hit` : `cache miss`;
+      const detail =
+        norm.cacheReadTokens > 0
+          ? `read ${norm.cacheReadTokens} times`
+          : `write ${norm.cacheWriteTokens} times`;
+      console.log(
+        `[${tag} ${detail} tokens - 本步骤 $ ${stepRecord.cost.toFixed(5)}]`,
+      );
+    }
+
+    if (totalTokens > TOKEN_BUDGET * 0.9) {
+      console.log(
+        `\n [Token 预算] 已使用${totalTokens} / ${TOKEN_BUDGET},(${Math.round((totalTokens / TOKEN_BUDGET) * 100)}%)`,
+      );
+    }
 
     // 检查是否超过预算
-    if (totalTokens > TOKEN_BUDGET) {
+    if (totalTokens > TOKEN_BUDGET * 0.9) {
       console.log("\n [Token 预算耗尽，强制停止]");
       break;
     }

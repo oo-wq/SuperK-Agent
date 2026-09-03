@@ -19,3 +19,6 @@ Thumbs.db
 .vscode/
 ## Session data（运行时对话历史）
 .sessions/
+
+## Usage log（运行时 token 用量日志）
+.usage/

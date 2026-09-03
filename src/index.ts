@@ -9,7 +9,7 @@ import { agentLoop } from "./agent/loop";
 import { MCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";
 import { estimateTokens, microcompact, summarize } from "./context/compressor";
-import { textToolResultOutput } from "./context/tool-result-output";
+import { UsageTracker } from "./usage/tracker";
 import {
   estimateMessageTokens,
   TokenTracker,
@@ -31,7 +31,7 @@ const qwen = createOpenAI({
   apiKey: process.env.DASHSCOPE_API_KEY,
 });
 const model = process.env.DASHSCOPE_API_KEY
-  ? qwen.chat("qwen3.8-27b")
+  ? qwen.chat("qwen3.8-flash")
   : createMockModel();
 
 // 注册内置工具
@@ -66,6 +66,11 @@ const toolSearchTool: ToolDefinition = {
   },
 };
 registry.register(toolSearchTool);
+
+// 成本跟踪
+const tracker = new UsageTracker('.usage/today.jsonl');
+
+
 
 // 连接MCP服务器
 async function connectMCP() {
@@ -202,7 +207,7 @@ async function main() {
       store.append(userMsg);
 
       const beforeLen = messages.length;
-      await agentLoop(model, registry, messages, SYSTEM);
+      await agentLoop(model, registry, messages, SYSTEM, tracker);
 
       // 持久化本轮新增加的消息 （包含Agent Loop中会往messages里面push的消息）
       const newMessages = messages.slice(beforeLen);
@@ -216,5 +221,7 @@ async function main() {
 
   ask();
 }
+
+
 
 main().catch(console.error);
