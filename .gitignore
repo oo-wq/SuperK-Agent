@@ -22,3 +22,6 @@ Thumbs.db
 
 ## Usage log（运行时 token 用量日志）
 .usage/
+
+## Memory data（运行时记忆存储，含用户私有记忆，不上传）
+.memory/
