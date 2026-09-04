@@ -47,3 +47,4 @@ export class VectorStore {
     return [...new Set(this.chunks.map((c) => c.source))];
   }
 }
+
