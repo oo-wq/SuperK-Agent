@@ -25,7 +25,11 @@ import { createDispatcher, type CommandContext } from "./commands/index";
 import { debugCommands } from "./commands/debug";
 import { memoryCommands } from "./commands/memory";
 import { contextCommands } from "./commands/context";
+import { ragCommands } from "./commands/rag";
 import { createMemoryTool } from "./tools/memory-tools";
+import { VectorStore } from "./rag/store";
+import { createDashScopeEmbedder, embed } from "./rag/embedder";
+import { createRagTools } from "./tools/rag-tools";
 
 // 创建 OpenAI 模型, 用于生成文本
 const qwen = createOpenAI({
@@ -88,7 +92,15 @@ const dispatch = createDispatcher([
   ...debugCommands,
   ...memoryCommands,
   ...contextCommands,
+  ...ragCommands,
 ]);
+
+// ------------------- RAG ------------------------
+const vectorStore = new VectorStore();
+const embedFn = createDashScopeEmbedder(
+  process.env.DASHSCOPE_API_KEY as string,
+);
+registry.register(...createRagTools(vectorStore, embedFn));
 
 async function main() {
   await connectMCP();
@@ -143,7 +155,9 @@ async function main() {
         makePromptCtx,
         ask,
         memoryStore,
+        vectorStore,
       };
+
       const handled = dispatch(trimmed, ctx); // 处理用户输入，如果是指令...
       if (handled === "async") return;
       if (handled) {
@@ -178,6 +192,8 @@ async function main() {
   console.log(`  /memory search     - 搜索记忆`);
   console.log(`  /context           - 终端里看 context 占用矩阵`);
   console.log(`  /usage             - 累计 token 用量和成本`);
+  console.log(`  /rag               - 查看知识库状态`);
+  console.log(`  ingest <path>      - 从文件导入知识`);
   console.log(`  status             - 当前消息数、token 和记忆数`);
   console.log("");
   console.log(` 已加载 ${memoryStore.list().length} 条历史记忆`);
