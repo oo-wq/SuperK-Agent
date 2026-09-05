@@ -25,3 +25,6 @@ Thumbs.db
 
 ## Memory data（运行时记忆存储，含用户私有记忆，不上传）
 .memory/
+
+## RAG 知识库（运行时生成，可重建）
+knowledge.db
