@@ -19,6 +19,7 @@ import { debugCommands } from "./commands/debug";
 import { memoryCommands } from "./commands/memory";
 import { contextCommands } from "./commands/context";
 import { ragCommands } from "./commands/rag";
+import { dreamCommands } from "./commands/dream";
 import { createMemoryTool } from "./tools/memory-tools";
 // import { VectorStore } from "./rag/store";
 import { SqliteVectorStore } from "./rag/sqlite-store";
@@ -91,6 +92,7 @@ const dispatch = createDispatcher([
   ...memoryCommands,
   ...contextCommands,
   ...ragCommands,
+  ...dreamCommands,
 ]);
 
 // ------------------- RAG ------------------------
