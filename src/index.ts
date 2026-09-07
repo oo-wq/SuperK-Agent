@@ -8,7 +8,14 @@ import { ToolRegistry, type ToolDefinition } from "./tools/registry";
 import { agentLoop, type BudgetState } from "./agent/loop";
 import { MCPClient } from "./tools/mcp-client";
 import { SessionStore } from "./session/store";
-import { PromptBuilder, coreRules, toolGuide, deferredTools, sessionContext, type PromptContext } from "./context/prompt-builder";
+import {
+  PromptBuilder,
+  coreRules,
+  toolGuide,
+  deferredTools,
+  sessionContext,
+  type PromptContext,
+} from "./context/prompt-builder";
 import { estimateTokens, microcompact, summarize } from "./context/compressor";
 import { estimateMessageTokens } from "./context/defense";
 import { UsageTracker } from "./usage/tracker";
@@ -28,7 +35,8 @@ import { createRagTools } from "./tools/rag-tools";
 import { memoryContext, ragContext } from "./context/prompt-pipes";
 import fs from "node:fs";
 import { chunkDocument } from "./rag/chunker";
-
+import { SkillLoader } from "./skills/loader";
+import { createSkillCommands } from "./commands/skill";
 
 // 创建 OpenAI 模型, 用于生成文本
 const qwen = createOpenAI({
@@ -38,6 +46,11 @@ const qwen = createOpenAI({
 const model = process.env.DASHSCOPE_API_KEY
   ? qwen.chat("qwen3.8-flash")
   : createMockModel();
+
+// ------------------- Skills ------------------------
+const skillLoader = new SkillLoader(); // skill加载器
+const loadedSkills = skillLoader.load();
+const activeSkills = new Set<string>();
 
 // ---------------- 注册工具 ------------------------
 const registry = new ToolRegistry();
@@ -93,6 +106,7 @@ const dispatch = createDispatcher([
   ...contextCommands,
   ...ragCommands,
   ...dreamCommands,
+  ...createSkillCommands(skillLoader, activeSkills),
 ]);
 
 // ------------------- RAG ------------------------
@@ -119,6 +133,7 @@ async function main() {
     .pipe("deferredTools", deferredTools())
     .pipe("memoryContext", memoryContext(memoryStore)) // 在历史消息中挑选有价值的上下文
     .pipe("ragContext", ragContext(vectorStore))
+    .pipe("skillContext", () => skillLoader.buildPromptSection(activeSkills))
     .pipe("sessionContext", sessionContext());
 
   function makePromptCtx(): PromptContext {
@@ -191,6 +206,10 @@ async function main() {
   console.log('Super Agent v0.11 — Memory System (type "exit" to quit)\n');
   console.log("快捷命令：");
   console.log(`  /memory            - 查看所有记忆`);
+  console.log(`  /skill             - 查看所有 Skill`);
+  console.log(`  /skill load <name>            - 加载指定 Skill`);
+  console.log(`  /skill unload <name>            - 卸载已激活指定 Skill`);
+  console.log(`  /code-review <path>             - 代码审核`);
   console.log(`  /memory search     - 搜索记忆`);
   console.log(`  /context           - 终端里看 context 占用矩阵`);
   console.log(`  /usage             - 累计 token 用量和成本`);
@@ -201,16 +220,29 @@ async function main() {
   console.log(` 已加载 ${memoryStore.list().length} 条历史记忆`);
   console.log("");
 
-  if(fs.existsSync("docs")) {
+  if (loadedSkills.length > 0) {
+    console.log(` 发现了 ${loadedSkills.length} 个 Skill`);
+    for(const s of loadedSkills) {
+      console.log(` ${s.name} - ${s.description}`);
+    }
+    console.log("");
+  }
+
+  if (fs.existsSync("docs")) {
     const files = fs.readdirSync("docs").filter((f) => f.endsWith(".md"));
-    if(files.length > 0) {
+    if (files.length > 0) {
       console.log(`发现了 ${files.length} 个文档，自动导入知识库...`);
-      for(const f of files) {
+      for (const f of files) {
         const path = `docs/${f}`;
         const text = fs.readFileSync(path, "utf-8");
-        const chunks = chunkDocument(path,text);
-        const embeddings = await embed(embedFn,chunks.map((c) => c.text));
-        vectorStore.addBatch(chunks.map((c,i) => ({chunk:c,embedding:embeddings[i]})));
+        const chunks = chunkDocument(path, text);
+        const embeddings = await embed(
+          embedFn,
+          chunks.map((c) => c.text),
+        );
+        vectorStore.addBatch(
+          chunks.map((c, i) => ({ chunk: c, embedding: embeddings[i] })),
+        );
         console.log(` ${f} -> ${chunks.length} 个片段`);
       }
       console.log(` 知识库准备就绪，共 ${vectorStore.size()} 个片段`);
