@@ -43,6 +43,7 @@ import { PluginDefinition } from "./plugins/types";
 import { supabasePlugin } from "./plugins/supabase-plugin";
 import { createPluginCommands } from "./commands/plugin";
 import { createSecurityCommands } from "./commands/security";
+import { HookPipeline } from "./security/hook";
 
 // 创建 OpenAI 模型, 用于生成文本
 const qwen = createOpenAI({
@@ -111,6 +112,27 @@ const availablePlugins = new Map<string, PluginDefinition>([
   ["supabase", supabasePlugin],
 ]);
 
+// ------------------- Hook ------------------------
+const hookPipeline = new HookPipeline();
+hookPipeline.registerPre("audit-log", (toolName, input) => {
+  if (toolName === "write_file" || toolName === "edit_file") {
+    const path = (input as any)?.path || "unknown";
+    console.log(`[audit] 写入文件操作: ${toolName} -> ${path}`);
+  }
+  return { action: "allow" };
+});
+// Post hook 示例
+hookPipeline.registerPost("audit-log", (toolName, input, output) => {
+  if (toolName === "bash") {
+    const timestamps = new Date().toISOString();
+    return {
+      action: "modify",
+      modifiedOutput: `[${timestamps}] \n${output}`,
+    };
+  }
+  return { action: "allow" };
+});
+registry.setHookPipeline(hookPipeline);
 
 // ------------------- Command ------------------------
 const dispatch = createDispatcher([
@@ -121,7 +143,7 @@ const dispatch = createDispatcher([
   ...dreamCommands,
   ...createSkillCommands(skillLoader, activeSkills),
   ...createPluginCommands(pluginManager, availablePlugins),
-  ...createSecurityCommands(registry),
+  ...createSecurityCommands(registry, hookPipeline),
 ]);
 
 // ------------------- RAG ------------------------
@@ -137,13 +159,14 @@ async function main() {
 
   // 启动时自动加载插件
   console.log("加载插件...");
-  for(const [name, def] of availablePlugins) {
-    try{
+  for (const [name, def] of availablePlugins) {
+    try {
       const tools = await pluginManager.load(def);
       console.log(`加载插件 ${name} 成功, 注册 ${tools.length} 个工具`);
-
-    }catch(err){
-      console.log(`加载插件 ${name} 失败: ${err instanceof Error ? err.message : err}`);
+    } catch (err) {
+      console.log(
+        `加载插件 ${name} 失败: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
@@ -184,7 +207,7 @@ async function main() {
       if (!trimmed || trimmed === "exit") {
         console.log("Bye!");
         // 关闭所有的插件的连接
-        await pluginManager.unloadAll(); 
+        await pluginManager.unloadAll();
         await registry.closeAllMCP(); // 关闭子进程的 MCP 连接
         rl.close();
         return;

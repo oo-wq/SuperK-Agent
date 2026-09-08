@@ -1,11 +1,11 @@
 import type { CommandHandler } from "./index.js";
-import type { ToolRegistry } from "../tools/registry.js";
-// import type { HookPipeline } from "../security/hooks.js";
+import type { ToolRegistry } from "../tools/registry";
+import type { HookPipeline } from "../security/hook";
 import type { Role } from "../security/roles.js";
 
 export function createSecurityCommands(
   registry: ToolRegistry,
-//   hookPipeline: HookPipeline,
+  hookPipeline: HookPipeline,
 ): CommandHandler[] {
   return [
     // /role [owner|collaborator|guest]
@@ -30,25 +30,25 @@ export function createSecurityCommands(
       return true;
     },
 
-    // // /hooks
-    // (cmd, _ctx) => {
-    //   if (cmd !== "/hooks") return false;
+    // /hooks
+    (cmd, _ctx) => {
+      if (cmd !== "/hooks") return false;
 
-    //   const hooks = hookPipeline.list();
-    //   console.log("\n[hooks]");
-    //   if (hooks.pre.length > 0) {
-    //     console.log("  Pre-Tool Hooks:");
-    //     for (const name of hooks.pre) console.log(`    - ${name}`);
-    //   }
-    //   if (hooks.post.length > 0) {
-    //     console.log("  Post-Tool Hooks:");
-    //     for (const name of hooks.post) console.log(`    - ${name}`);
-    //   }
-    //   if (hooks.pre.length === 0 && hooks.post.length === 0) {
-    //     console.log("  没有注册的 Hook");
-    //   }
-    //   console.log("");
-    //   return true;
-    // },
+      const hooks = hookPipeline.list();
+      console.log("\n[hooks]");
+      if (hooks.pre.length > 0) {
+        console.log("  Pre-Tool Hooks:");
+        for (const name of hooks.pre) console.log(`    - ${name}`);
+      }
+      if (hooks.post.length > 0) {
+        console.log("  Post-Tool Hooks:");
+        for (const name of hooks.post) console.log(`    - ${name}`);
+      }
+      if (hooks.pre.length === 0 && hooks.post.length === 0) {
+        console.log("  没有注册的 Hook");
+      }
+      console.log("");
+      return true;
+    },
   ];
 }
