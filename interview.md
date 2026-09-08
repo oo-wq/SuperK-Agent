@@ -92,9 +92,14 @@
 
 # 面试官: 什么是Skill？
  - 本质是什么
+   Skill本质上是一种“给模型的额外系统提示词 + 规范化流程”，是用于指导大模型如何进行某种特定任务，是一份人类可读、机器可以加载指令文档
 
  - 给Agent带来了什么能力
+   让agent增强了在一些专有领域的能力，比如代码审查、文档编写、数据处理等，通过Skill，agent可以更智能地完成这些任务，提高效率。
+   处理同类任务时，agent有一套标准的流程，提高了agent的处理效率。
 
  - 一个Skill的格式
+   Skill的格式由frontmatter + markdown正文，frontmatter主要用来找Skill以及决定何时使用这个Skill，markdown正文主要用来描述Skill的功能和使用方法、输出格式等
 
  - Agent中如何调用Skill
+   Agent使用时先扫描所有的Skill，然后根据定义的变量判断当前Skill是否激活，将激活的skill的正文拼入提示词，并且根据用户或模型输入按需加载触发对应的Skill。

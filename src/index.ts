@@ -27,16 +27,21 @@ import { memoryCommands } from "./commands/memory";
 import { contextCommands } from "./commands/context";
 import { ragCommands } from "./commands/rag";
 import { dreamCommands } from "./commands/dream";
+
 import { createMemoryTool } from "./tools/memory-tools";
-// import { VectorStore } from "./rag/store";
+// import { VectorStore } from './rag/store'
 import { SqliteVectorStore } from "./rag/sqlite-store";
 import { createDashScopeEmbedder, embed } from "./rag/embedder";
 import { createRagTools } from "./tools/rag-tools";
-import { memoryContext, ragContext } from "./context/prompt-pipes";
+import { ragContext, memoryContext } from "./context/prompt-pipes";
 import fs from "node:fs";
 import { chunkDocument } from "./rag/chunker";
 import { SkillLoader } from "./skills/loader";
 import { createSkillCommands } from "./commands/skill";
+import { PluginManager } from "./plugins/manager";
+import { PluginDefinition } from "./plugins/types";
+import { supabasePlugin } from "./plugins/supabase-plugin";
+import { createPluginCommands } from "./commands/plugin";
 
 // 创建 OpenAI 模型, 用于生成文本
 const qwen = createOpenAI({
@@ -46,11 +51,6 @@ const qwen = createOpenAI({
 const model = process.env.DASHSCOPE_API_KEY
   ? qwen.chat("qwen3.8-flash")
   : createMockModel();
-
-// ------------------- Skills ------------------------
-const skillLoader = new SkillLoader(); // skill加载器
-const loadedSkills = skillLoader.load();
-const activeSkills = new Set<string>();
 
 // ---------------- 注册工具 ------------------------
 const registry = new ToolRegistry();
@@ -99,6 +99,18 @@ const memoryStore = new MemoryStore(".");
 memoryStore.init();
 registry.register(createMemoryTool(memoryStore));
 
+// ------------------- Skills ------------------------
+const skillLoader = new SkillLoader(); // skill 加载器
+const loadedSkills = skillLoader.load();
+const activeSkills = new Set<string>();
+
+// ------------------- Plugins ------------------------
+const pluginManager = new PluginManager(registry);
+const availablePlugins = new Map<string, PluginDefinition>([
+  ["supabase", supabasePlugin],
+]);
+
+
 // ------------------- Command ------------------------
 const dispatch = createDispatcher([
   ...debugCommands,
@@ -107,10 +119,11 @@ const dispatch = createDispatcher([
   ...ragCommands,
   ...dreamCommands,
   ...createSkillCommands(skillLoader, activeSkills),
+  ...createPluginCommands(pluginManager, availablePlugins),
 ]);
 
 // ------------------- RAG ------------------------
-// const vectorStore = new VectorStore();
+// const vectorStore = new VectorStore()
 const vectorStore = new SqliteVectorStore("knowledge.db");
 const embedFn = createDashScopeEmbedder(
   process.env.DASHSCOPE_API_KEY as string,
@@ -119,6 +132,18 @@ registry.register(...createRagTools(vectorStore, embedFn));
 
 async function main() {
   await connectMCP();
+
+  // 启动时自动加载插件
+  console.log("加载插件...");
+  for(const [name, def] of availablePlugins) {
+    try{
+      const tools = await pluginManager.load(def);
+      console.log(`加载插件 ${name} 成功, 注册 ${tools.length} 个工具`);
+
+    }catch(err){
+      console.log(`加载插件 ${name} 失败: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   // Session 持久化
   const store = new SessionStore("default");
@@ -156,6 +181,8 @@ async function main() {
       const trimmed = input.trim();
       if (!trimmed || trimmed === "exit") {
         console.log("Bye!");
+        // 关闭所有的插件的连接
+        await pluginManager.unloadAll(); 
         await registry.closeAllMCP(); // 关闭子进程的 MCP 连接
         rl.close();
         return;
@@ -207,9 +234,9 @@ async function main() {
   console.log("快捷命令：");
   console.log(`  /memory            - 查看所有记忆`);
   console.log(`  /skill             - 查看所有 Skill`);
-  console.log(`  /skill load <name>            - 加载指定 Skill`);
-  console.log(`  /skill unload <name>            - 卸载已激活指定 Skill`);
-  console.log(`  /code-review <path>             - 代码审核`);
+  console.log(`  /skill load <name> - 加载指定 Skill`);
+  console.log(`  /skill unload <name> - 卸载已激活指定 Skill`);
+  console.log(`  /code-review       - 激活并执行 code-review Skill`);
   console.log(`  /memory search     - 搜索记忆`);
   console.log(`  /context           - 终端里看 context 占用矩阵`);
   console.log(`  /usage             - 累计 token 用量和成本`);
@@ -222,8 +249,8 @@ async function main() {
 
   if (loadedSkills.length > 0) {
     console.log(` 发现了 ${loadedSkills.length} 个 Skill`);
-    for(const s of loadedSkills) {
-      console.log(` ${s.name} - ${s.description}`);
+    for (const s of loadedSkills) {
+      console.log(`  ${s.name} - ${s.description}`);
     }
     console.log("");
   }
@@ -231,7 +258,7 @@ async function main() {
   if (fs.existsSync("docs")) {
     const files = fs.readdirSync("docs").filter((f) => f.endsWith(".md"));
     if (files.length > 0) {
-      console.log(`发现了 ${files.length} 个文档，自动导入知识库...`);
+      console.log(` 发现 ${files.length} 个文档， 自动导入知识库...`);
       for (const f of files) {
         const path = `docs/${f}`;
         const text = fs.readFileSync(path, "utf-8");
@@ -243,9 +270,9 @@ async function main() {
         vectorStore.addBatch(
           chunks.map((c, i) => ({ chunk: c, embedding: embeddings[i] })),
         );
-        console.log(` ${f} -> ${chunks.length} 个片段`);
+        console.log(`  ${f} -> ${chunks.length} 个片段`);
       }
-      console.log(` 知识库准备就绪，共 ${vectorStore.size()} 个片段`);
+      console.log(` 知识库准备就绪， 共 ${vectorStore.size()} 个片段\n`);
     }
   }
 

@@ -35,6 +35,11 @@ export class ToolRegistry {
     }
   }
 
+  unregister(name: string): void {
+    this.discoveredTools.delete(name);
+    this.tools.delete(name);
+  }
+
   async registerMCPServer(
     serverName: string,
     client: MCPClient,
