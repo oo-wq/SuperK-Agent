@@ -42,6 +42,7 @@ import { PluginManager } from "./plugins/manager";
 import { PluginDefinition } from "./plugins/types";
 import { supabasePlugin } from "./plugins/supabase-plugin";
 import { createPluginCommands } from "./commands/plugin";
+import { createSecurityCommands } from "./commands/security";
 
 // 创建 OpenAI 模型, 用于生成文本
 const qwen = createOpenAI({
@@ -120,6 +121,7 @@ const dispatch = createDispatcher([
   ...dreamCommands,
   ...createSkillCommands(skillLoader, activeSkills),
   ...createPluginCommands(pluginManager, availablePlugins),
+  ...createSecurityCommands(registry),
 ]);
 
 // ------------------- RAG ------------------------

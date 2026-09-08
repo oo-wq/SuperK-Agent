@@ -1,5 +1,7 @@
 import { jsonSchema } from "ai";
 import type { MCPClient } from "./mcp-client";
+import { canUseTool, type Role } from "../security/roles";
+import { classifyBashCommand } from "../security/bash-classifier";
 
 export interface ToolDefinition {
   name: string;
@@ -28,11 +30,23 @@ export class ToolRegistry {
   // 已发现的工具列表
   private discoveredTools = new Set<string>(); // 已发现的工具列表，用于避免重复注册
 
+  // 当前角色
+  private currentRole: Role = "owner";
+
   register(...tools: ToolDefinition[]): void {
     // 将来在任何地方定义的工具，都直接通过register方法注册，被存入tools列表
     for (const tool of tools) {
       this.tools.set(tool.name, tool);
     }
+  }
+
+  // 切换权限角色
+  setRole(role: Role): void {
+    this.currentRole = role;
+  }
+
+  getRole(): Role {
+    return this.currentRole;
   }
 
   unregister(name: string): void {
@@ -139,18 +153,30 @@ export class ToolRegistry {
       const executeFn = tool.execute;
       const isSafe = tool.isConcurrencySafe === true;
       const registry = this;
+      const toolName = tool.name;
 
-      result[tool.name] = {
+      result[toolName] = {
         description: tool.description,
         inputSchema: jsonSchema(tool.parameters as any),
         execute: async (input: any) => {
+          // Bash 风险检测
+          if (toolName === "bash" && input?.command) {
+            const risk = classifyBashCommand(input.command);
+            if (risk.level === "dangerous") {
+              return `[拒绝执行] 检测到危险操作：${risk.reason}\n命令：${input.command}`;
+            }
+            if (risk.level === "moderate") {
+              console.log(` [安全警告] 操作：${risk.reason}\n命令：${input.command}`);
+            }
+          }
+
           // 在真正执行前，先按 isConcurrencySafe 来获取锁
           if (isSafe) {
             await registry.acquireConcurrent();
-            console.log(` [并发] ${tool.name} 获取共享锁`);
+            console.log(` [并发] ${toolName} 获取共享锁`);
           } else {
             await registry.acquireExclusive();
-            console.log(` [串行] ${tool.name} 获得独占锁，等待其他工具完成`);
+            console.log(` [串行] ${toolName} 获得独占锁，等待其他工具完成`);
           }
 
           try {
@@ -200,6 +226,11 @@ export class ToolRegistry {
       if (tool.shouldDefer && !this.discoveredTools.has(tool.name)) {
         return false;
       }
+
+      if (!canUseTool(this.currentRole, tool.name)) {
+        return false;
+      }
+
       return true;
     });
   }
@@ -214,17 +245,17 @@ export class ToolRegistry {
 
     const lines = deferred.map((t) => {
       const hint = t.searchHint ? ` — ${t.searchHint}` : "";
-      return `  - ${t.name}${hint}`; 
+      return `  - ${t.name}${hint}`;
     });
 
     return `\n以下工具可用，但需要先通过 tool_search 搜索获取完整定义：\n${lines.join("\n")}`;
   }
 
   // 估算token
-  countTokensEstimate(): { active: number; deferred: number, total: number } {
-    let active = 0
-    let deferred = 0
-    
+  countTokensEstimate(): { active: number; deferred: number; total: number } {
+    let active = 0;
+    let deferred = 0;
+
     for (const tool of this.getAll()) {
       const schemaSize = JSON.stringify({
         name: tool.name,
