@@ -44,6 +44,9 @@ import { supabasePlugin } from "./plugins/supabase-plugin";
 import { createPluginCommands } from "./commands/plugin";
 import { createSecurityCommands } from "./commands/security";
 import { HookPipeline } from "./security/hook";
+import { CronService } from "./cron/service";
+import { createCronTool } from "./tools/cron-tools";
+import { createCronCommands } from "./commands/cron";
 
 // 创建 OpenAI 模型, 用于生成文本
 const qwen = createOpenAI({
@@ -51,7 +54,7 @@ const qwen = createOpenAI({
   apiKey: process.env.DASHSCOPE_API_KEY,
 });
 const model = process.env.DASHSCOPE_API_KEY
-  ? qwen.chat("qwen3.8-flash")
+  ? qwen.chat("qwen3.7-plus")
   : createMockModel();
 
 // ---------------- 注册工具 ------------------------
@@ -134,7 +137,11 @@ hookPipeline.registerPost("audit-log", (toolName, input, output) => {
 });
 registry.setHookPipeline(hookPipeline);
 
-// ------------------- Command ------------------------
+// ------------------- Cron ------------------------
+const cronService = new CronService("."); // 初始化定时任务服务
+registry.register(createCronTool(cronService)); // 注册定时任务工具
+
+//// ------------------- Command ------------------------
 const dispatch = createDispatcher([
   ...debugCommands,
   ...memoryCommands,
@@ -144,6 +151,7 @@ const dispatch = createDispatcher([
   ...createSkillCommands(skillLoader, activeSkills),
   ...createPluginCommands(pluginManager, availablePlugins),
   ...createSecurityCommands(registry, hookPipeline),
+  ...createCronCommands(cronService),
 ]);
 
 // ------------------- RAG ------------------------
@@ -170,7 +178,32 @@ async function main() {
     }
   }
 
-  // Session 持久化
+  // 定时任务
+  cronService.load();
+  cronService.setExecutor({
+    runAgentPrompt: async (prompt, timeout) => {
+      const cronMessage: ModelMessage[] = [{ role: "user", content: prompt }];
+      const system = builder.build(makePromptCtx());
+      await agentLoop(model, registry, cronMessage, system);
+      const lastMsg = cronMessage[cronMessage.length - 1];
+      if (!lastMsg) return "无输出";
+      if (Array.isArray(lastMsg.content)) {
+        return lastMsg.content
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("");
+      }
+      return String(lastMsg.content);
+    },
+    notify: (message) => {
+      console.log(`\n${message}`);
+    },
+  });
+  cronService.start(); // 启动定时任务
+  const cronJobs = cronService.list();
+  console.log(`Cron:${cronJobs.length}个任务已加载`);
+
+  // Session 持久化·
   const store = new SessionStore("default");
   let messages: ModelMessage[] = [];
   const timestamps = new Map<number, number>(); // 消息索引 -> 时间戳映射
