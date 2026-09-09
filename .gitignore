@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+## 个人文档 —— 不上传
+interview.md
+
 ## Dependencies
 node_modules/
 
