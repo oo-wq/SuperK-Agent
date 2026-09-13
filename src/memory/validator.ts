@@ -33,7 +33,7 @@ export function extractPaths(content: string): string[] {
 
 export function validateEntry(
   entry: MemoryEntry,
-  baseDir: ".",
+  baseDir: string = ".",
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
@@ -66,7 +66,7 @@ export function validateEntry(
 
 export function lintAll(
   entries: MemoryEntry[],
-  baseDir: ".",
+  baseDir: string = ".",
 ): ValidationReport[] {
   const reports: ValidationReport[] = [];
 

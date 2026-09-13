@@ -22,10 +22,10 @@ export class SubAgentRegistry {
   }
 
   canSpawn(currentDepth: number): { ok: boolean; reason?: string } {
-    if (currentDepth >= this.config.maxASpawnDepth) {
+    if (currentDepth >= this.config.maxSpawnDepth) {
       return {
         ok: false,
-        reason: `已达到最大嵌套深度 ${this.config.maxASpawnDepth}`,
+        reason: `已达到最大嵌套深度 ${this.config.maxSpawnDepth}`,
       };
     }
     const activeCount = this.getActiveRuns().length;
