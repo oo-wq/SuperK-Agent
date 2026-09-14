@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/swords-arrivall/superk-agent.git"
+    "url": "https://github.com/oo-wq/SuperK-Agent.git"
   },
   "devEngines": {
     "packageManager": {
