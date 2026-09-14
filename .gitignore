@@ -38,3 +38,6 @@ knowledge.db
 
 ## Cron 任务持久化数据（运行时生成）
 .cron/
+
+## Claude Code —— 本机专属配置，不上传
+.claude/settings.json
