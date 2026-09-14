@@ -20,6 +20,7 @@ build/
 Thumbs.db
 .idea/
 .vscode/
+
 ## Session data（运行时对话历史）
 .sessions/
 
@@ -31,3 +32,9 @@ Thumbs.db
 
 ## RAG 知识库（运行时生成，可重建）
 knowledge.db
+
+## Skills（运行时加载的技能定义）
+.skills/
+
+## Cron 任务持久化数据（运行时生成）
+.cron/

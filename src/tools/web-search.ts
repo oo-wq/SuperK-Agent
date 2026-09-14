@@ -139,7 +139,7 @@ export const webFetchTool: ToolDefinition = {
   execute: async ({ url }: { url: string }) => {
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperAgent/1.0)" },
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SuperKAgent/1.0)" },
         signal: AbortSignal.timeout(15000),
       });
       if (!res.ok) return `抓取失败: HTTP ${res.status}`;

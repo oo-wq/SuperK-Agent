@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { loadConfig } from './config/loader.js';
-import type { SuperAgentConfig } from './config/schema.js';
+import type { SuperKAgentConfig } from './config/schema.js';
 import fs from 'node:fs';
 import { type ModelMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -50,7 +50,7 @@ import { MCPClient } from './tools/mcp-client'
 // ── 加载配置 ────────────────────────────────
 const config = loadConfig();
 
-function createModel(cfg: SuperAgentConfig['model']) {
+function createModel(cfg: SuperKAgentConfig['model']) {
   if (!cfg.apiKey) return createMockModel();
   const provider = createOpenAI({ baseURL: cfg.baseURL, apiKey: cfg.apiKey });
   return provider.chat(cfg.name);
@@ -75,12 +75,20 @@ const embedFn = config.model.apiKey
 registry.register(...createRagTools(vectorStore, embedFn));
 
 async function connectMCP() {
-  const mcpClient = new MCPClient(
-    'pnpm', ['dlx', '@modelcontextprotocol/server-github'],
-    { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN as string },
-  );
-  const tools = await registry.registerMCPServer('github', mcpClient);
-  console.log(`  已注册 ${tools.length} 个 MCP 工具`);
+  if (!process.env.GITHUB_PERSONAL_ACCESS_TOKEN) {
+    console.log('  ⚠ 未配置 GITHUB_PERSONAL_ACCESS_TOKEN，跳过 GitHub MCP 服务');
+    return;
+  }
+  try {
+    const mcpClient = new MCPClient(
+      'pnpm', ['dlx', '@modelcontextprotocol/server-github'],
+      { GITHUB_PERSONAL_ACCESS_TOKEN: process.env.GITHUB_PERSONAL_ACCESS_TOKEN },
+    );
+    const tools = await registry.registerMCPServer('github', mcpClient);
+    console.log(`  已注册 ${tools.length} 个 MCP 工具`);
+  } catch (err) {
+    console.warn(`  ⚠ GitHub MCP 服务连接失败，已跳过: ${(err as Error).message}`);
+  }
 }
 
 // ── Skills ────────────────────────────────────────
@@ -264,7 +272,7 @@ export async function startAgent() {
   const toolCount = registry.getActiveTools().length;
   const hooks = hookPipeline.list();
 
-  console.log('Super Agent v1.0 (type "exit" to quit)');
+  console.log('SuperK-Agent v1.0 (type "exit" to quit)');
   console.log('快捷命令：');
   console.log('  /agents           — 查看子 Agent 记录');
   console.log('  /cron             — 查看定时任务');

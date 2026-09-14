@@ -49,7 +49,7 @@ export const UsageConfigSchema = z.object({
   trackingFile: z.string().default(".usage/today.jsonl"),
 });
 
-export const SuperAgentConfigSchema = z.object({
+export const SuperKAgentConfigSchema = z.object({
   version: z.string().default("1.0"),
   model: ModelConfigSchema.default(ModelConfigSchema.parse({})),
   plugins: z.array(PluginConfigSchema).default([]),
@@ -62,4 +62,4 @@ export const SuperAgentConfigSchema = z.object({
   usage: UsageConfigSchema.default(UsageConfigSchema.parse({})),
 });
 
-export type SuperAgentConfig = z.infer<typeof SuperAgentConfigSchema>;
+export type SuperKAgentConfig = z.infer<typeof SuperKAgentConfigSchema>;

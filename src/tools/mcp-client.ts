@@ -84,7 +84,7 @@ export class MCPClient {
     await this.send("initialize", {
       protocolVersion: "2025-11-25",
       capabilities: {},
-      clientInfo: { name: "super-agent", version: "0.5.0" },
+      clientInfo: { name: "superk-agent", version: "0.5.0" },
     });
 
     this.process.stdin!.write(

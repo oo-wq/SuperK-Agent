@@ -1,7 +1,7 @@
 import fs from "node:fs";
-import { SuperAgentConfigSchema, type SuperAgentConfig } from "./schema.js";
+import { SuperKAgentConfigSchema, type SuperKAgentConfig } from "./schema.js";
 
-export const CONFIG_FILE = "super-agent.config.json";
+export const CONFIG_FILE = "superk-agent.config.json";
 
 const ENV_VAR_RE = /\$\{([A-Z_][A-Z0-9_]*)\}/g;
 
@@ -27,11 +27,11 @@ function substituteEnvVars(obj: unknown): unknown {
   return obj;
 }
 
-export function loadConfig(path = CONFIG_FILE): SuperAgentConfig {
+export function loadConfig(path = CONFIG_FILE): SuperKAgentConfig {
   if (!fs.existsSync(path)) {
     console.log(`  未找到 ${path}，使用默认配置`);
     console.log("  运行 pnpm run init 生成配置文件\n");
-    return SuperAgentConfigSchema.parse({});
+    return SuperKAgentConfigSchema.parse({});
   }
 
   let raw: unknown;
@@ -44,7 +44,7 @@ export function loadConfig(path = CONFIG_FILE): SuperAgentConfig {
 
   const substituted = substituteEnvVars(raw);
 
-  const result = SuperAgentConfigSchema.safeParse(substituted);
+  const result = SuperKAgentConfigSchema.safeParse(substituted);
   if (!result.success) {
     console.error("  ✗ 配置文件校验失败:");
     for (const issue of result.error.issues) {
