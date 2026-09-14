@@ -36,8 +36,8 @@
 方式一：git clone（推荐）
 
 ```bash
-git clone https://github.com/swords-arrivall/superk-agent.git
-cd superk-agent
+git clone https://github.com/oo-wq/SuperK-Agent.git
+cd SuperK-Agent
 ```
 
 方式二：直接下载
