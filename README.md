@@ -8,13 +8,15 @@
 
 | 模块 | 说明 |
 |---|---|
-| 🧠 **记忆系统** | SQLite 持久化记忆，含格式校验与 `lint` 自检 |
-| 📚 **RAG 知识库** | `sqlite-vec` 向量检索，文档分块 + DashScope Embedding |
-| ⏰ **定时任务** | 基于 cron 表达式，支持持久化、状态追踪、连续失败熔断、崩溃恢复 |
-| 🤝 **多 Agent** | 独立上下文窗口的 Sub-Agent 并行执行，压缩结果回传父 Agent |
-| 🔒 **安全管线** | 角色权限（owner/developer/collaborator/guest）、Bash 命令风险分类、Hook 管线 |
-| 🛠️ **工具系统** | Bash / 文件 / 搜索 / Web 搜索 / MCP（GitHub）/ 子 Agent 生成 |
-| 📏 **防跑飞** | 死循环检测（指纹 + 滑动窗口）、Token 预算、指数退避重试 |
+| 🧠 记忆系统 | SQLite 持久化记忆，含格式校验与 `lint` 自检 |
+| 📚 RAG 知识库 | `sqlite-vec` 向量检索，文档分块 + DashScope Embedding |
+| ⏰ 定时任务 | 基于 cron 表达式，支持持久化、状态追踪、连续失败熔断、崩溃恢复 |
+| 🤝 多 Agent | 独立上下文窗口的 Sub-Agent 并行执行，压缩结果回传父 Agent |
+| 🔒 安全管线 | 角色权限（owner/developer/collaborator/guest）、Bash 命令风险分类、Hook 管线 |
+| 🛠️ 工具系统 | Bash / 文件 / 搜索 / Web 搜索 / MCP（GitHub）/ 子 Agent 生成 |
+| 📏 防跑飞 | 死循环检测（指纹 + 滑动窗口）、Token 预算、指数退避重试 |
+| 🧩 Skill 机制 | 用 Markdown + YAML frontmatter 注入行为规范，约束 Agent 行为 |
+| 🔌 Plugin 机制 | 插件化扩展工具，动态注册/卸载与生命周期管理 |
 
 ### 技术栈
 
@@ -34,8 +36,8 @@
 方式一：git clone（推荐）
 
 ```bash
-git clone https://github.com/<你的用户名>/personal-agent.git
-cd personal-agent
+git clone https://github.com/swords-arrivall/superk-agent.git
+cd superk-agent
 ```
 
 方式二：直接下载
@@ -48,7 +50,7 @@ cd personal-agent
 pnpm install
 ```
 
-> 依赖含原生模块 `better-sqlite3`、`sqlite-vec`，首次安装会自动编译，稍等片刻即可。
+> 依赖含原生模块 `better-sqlite3`、`sqlite-vec`。它们已内置常见平台的预编译二进制，一般无需本地编译；若你的平台 / Node 版本没有对应预编译包，则需要 Visual Studio Build Tools（Windows）或 gcc/make（Linux/macOS）。
 
 ### 4. 配置
 
@@ -94,3 +96,8 @@ pnpm continue   # 或：从上次会话继续
 - **安装报原生模块编译错误**：Windows 需安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选「使用 C++ 的桌面开发」）；或改用 Node 22+（自带预编译二进制）。
 - **没填 `DASHSCOPE_API_KEY`**：Agent 会降级为 mock 假模型（仅用于调试），填入真实 Key 即可调用真实模型。
 - **`.env` 会泄露吗**：不会，`.env` 已被 `.gitignore` 忽略，密钥只存在本机，仓库只提供 `.env.example` 模板。
+- **GitHub MCP 连不上**：需要配置 `GITHUB_PERSONAL_ACCESS_TOKEN`；未配置或连接失败时 Agent 会自动跳过该服务，不影响启动。
+
+## License
+
+[MIT](LICENSE)
