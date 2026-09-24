@@ -38,8 +38,9 @@ function stableStringify(value: unknown): string {
     return `[${value.map(stableStringify).join(",")}]`; // ['xxx,yyy']
   }
 
-  const keys = Object.keys(value as Record<string, unknown>).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((value as any)[k])}`).join(",")}}`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(",")}}`;
 }
 
 function hash(input: string): string {
@@ -54,7 +55,7 @@ export function hashResult(result: unknown): string {
   return hash(stableStringify(result));
 }
 
-//  滑动窗口
+// 滑动窗口
 const history: ToolCallRecord[] = [];
 
 export function recordCall(toolName: string, params: unknown): void {
@@ -100,7 +101,7 @@ function getNoProgressStreak(toolName: string, argsHash: string): number {
     const r = history[i];
     if (r.toolName !== toolName || r.argsHash !== argsHash) continue;
     if (!r.resultHash) continue;
-    if (!lastResultHash) {
+    if (lastResultHash === undefined) {
       lastResultHash = r.resultHash;
       streak = 1;
       continue;
@@ -132,6 +133,23 @@ function getPingPongCount(currentHash: string): number {
   return 0;
 }
 
+function countMatching(toolName: string, argsHash: string): number {
+  let count = 0;
+  for (const r of history) {
+    if (r.toolName === toolName && r.argsHash === argsHash) count++;
+  }
+  return count;
+}
+
+function makeStuckResult(
+  level: "warning" | "critical",
+  detector: DetectorKind,
+  count: number,
+  message: string,
+): DetectionResult {
+  return { stuck: true, level, detector, count, message };
+}
+
 // --- 主检测函数 ---
 
 export function detect(toolName: string, params: unknown): DetectionResult {
@@ -139,55 +157,48 @@ export function detect(toolName: string, params: unknown): DetectionResult {
   const noProgress = getNoProgressStreak(toolName, argsHash);
 
   if (noProgress >= BREAKER_THRESHOLD) {
-    return {
-      stuck: true,
-      level: "critical",
-      detector: "global_circuit_breaker",
-      count: noProgress,
-      message: `[熔断] ${toolName} 已重复 ${noProgress} 次且无进展，强制停止`,
-    };
+    return makeStuckResult(
+      "critical",
+      "global_circuit_breaker",
+      noProgress,
+      `[熔断] ${toolName} 已重复 ${noProgress} 次且无进展，强制停止`,
+    );
   }
 
   const pingPong = getPingPongCount(argsHash);
   if (pingPong >= CRITICAL_THRESHOLD) {
-    return {
-      stuck: true,
-      level: "critical",
-      detector: "ping_pong",
-      count: pingPong,
-      message: `[熔断] 检测到乒乓循环（${pingPong} 次交替），强制停止`,
-    };
+    return makeStuckResult(
+      "critical",
+      "ping_pong",
+      pingPong,
+      `[熔断] 检测到乒乓循环（${pingPong} 次交替），强制停止`,
+    );
   }
   if (pingPong >= WARNING_THRESHOLD) {
-    return {
-      stuck: true,
-      level: "warning",
-      detector: "ping_pong",
-      count: pingPong,
-      message: `[警告] 检测到乒乓循环（${pingPong} 次交替），建议换个思路`,
-    };
+    return makeStuckResult(
+      "warning",
+      "ping_pong",
+      pingPong,
+      `[警告] 检测到乒乓循环（${pingPong} 次交替），建议换个思路`,
+    );
   }
 
-  const recentCount = history.filter(
-    (h) => h.toolName === toolName && h.argsHash === argsHash,
-  ).length;
+  const recentCount = countMatching(toolName, argsHash);
   if (recentCount >= CRITICAL_THRESHOLD) {
-    return {
-      stuck: true,
-      level: "critical",
-      detector: "generic_repeat",
-      count: recentCount,
-      message: `[熔断] ${toolName} 相同参数已调用 ${recentCount} 次，强制停止`,
-    };
+    return makeStuckResult(
+      "critical",
+      "generic_repeat",
+      recentCount,
+      `[熔断] ${toolName} 相同参数已调用 ${recentCount} 次，强制停止`,
+    );
   }
   if (recentCount >= WARNING_THRESHOLD) {
-    return {
-      stuck: true,
-      level: "warning",
-      detector: "generic_repeat",
-      count: recentCount,
-      message: `[警告] ${toolName} 相同参数已调用 ${recentCount} 次，你可能陷入了重复`,
-    };
+    return makeStuckResult(
+      "warning",
+      "generic_repeat",
+      recentCount,
+      `[警告] ${toolName} 相同参数已调用 ${recentCount} 次，你可能陷入了重复`,
+    );
   }
 
   return { stuck: false };
