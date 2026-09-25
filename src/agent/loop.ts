@@ -12,6 +12,7 @@ import { type UsageTracker, normalizeUsage } from "../usage/tracker";
 const MAX_STEPS = 50; // 最大循环次数
 const MAX_RETRIES = 3; // 最大重试次数
 const TOKEN_BUDGET = 500000; // token 预算
+const TOKEN_BUDGET_WARN = TOKEN_BUDGET * 0.9; // 预算告警阈值（90%）
 
 export interface BudgetState {
   used: number;
@@ -41,7 +42,7 @@ export async function agentLoop(
     let stepResponse: Awaited<ReturnType<typeof streamText>["response"]>;
     let stepUsage: Awaited<ReturnType<typeof streamText>["usage"]>;
 
-    // 步骤重试：应该包裹 streamText，和 result的处理
+    // 步骤重试：包裹 streamText 以及结果的处理
     for (let attempt = 1; ; attempt++) {
       try {
         const result = streamText({
@@ -54,17 +55,16 @@ export async function agentLoop(
           providerOptions: {
             openai: { parallelCalls: true },
           },
-          // 不配置 stopwhen，就只会跑一次
+          // 不配置 stopWhen，一次 streamText 调用只推进一轮
         });
 
         for await (const part of result.fullStream) {
-          // fullStream 是ai库生成一个水桶，里面装的是模型的输出，并且当工具调用完毕后会自动的将结果添加到水桶中
           switch (part.type) {
             case "text-delta":
               process.stdout.write(part.text);
               fullText += part.text;
               break;
-            case "tool-call":
+            case "tool-call": {
               hasToolCall = true;
               lastToolCall = { name: part.toolName, input: part.input };
               console.log(
@@ -88,8 +88,8 @@ export async function agentLoop(
 
               recordCall(part.toolName, part.input); // 记录当前这次的工具调用
               break;
-
-            case "tool-result":
+            }
+            case "tool-result": {
               const output =
                 typeof part.output === "string"
                   ? part.output
@@ -106,18 +106,19 @@ export async function agentLoop(
                 );
               }
               break;
+            }
           }
         }
 
         stepResponse = await result.response;
-        stepUsage = await result.usage; // 让大模型
+        stepUsage = await result.usage;
         break;
       } catch (error) {
         if (attempt > MAX_RETRIES || !isRetryable(error as Error)) throw error;
         const delay = calculateDelay(attempt);
         console.log(
           ` [重试] 第 ${attempt}/${MAX_RETRIES} 次失败，${delay}ms 后重试...`,
-        ); // 计算重试延迟
+        );
         await sleep(delay);
         hasToolCall = false;
         fullText = "";
@@ -135,7 +136,7 @@ export async function agentLoop(
     messages.push(...stepResponse!.messages);
 
     // 把 usage 喂给 tracker，tracker 内部会按四类 token 分别累计并计算 cost
-    const norm = normalizeUsage(stepUsage); // 把从 AI SDK 返回的 usage 对象规范成四类token
+    const norm = normalizeUsage(stepUsage);
     const stepRecord = tracker?.record(model?.modelId || "", norm);
     totalTokens +=
       norm.inputTokens +
@@ -154,14 +155,11 @@ export async function agentLoop(
       );
     }
 
-    if (totalTokens > TOKEN_BUDGET * 0.9) {
+    // 检查是否接近/超过预算
+    if (totalTokens > TOKEN_BUDGET_WARN) {
       console.log(
         `\n [Token 预算] 已使用${totalTokens} / ${TOKEN_BUDGET},(${Math.round((totalTokens / TOKEN_BUDGET) * 100)}%)`,
       );
-    }
-
-    // 检查是否超过预算
-    if (totalTokens > TOKEN_BUDGET * 0.9) {
       console.log("\n [Token 预算耗尽，强制停止]");
       break;
     }
