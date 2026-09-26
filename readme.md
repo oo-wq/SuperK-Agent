@@ -24,6 +24,14 @@
 - **模型**：阿里云百炼 DashScope（Qwen 系列，OpenAI 兼容接口）
 - **核心依赖**：`ai`（Vercel AI SDK）、`@ai-sdk/openai`、`better-sqlite3`、`sqlite-vec`、`croner`、`zod`
 
+### 防跑飞（保险丝）
+
+Agent 循环内置三层熔断，防止死循环与资源失控：
+
+- **死循环检测**（`loop-detection.ts`）：工具名 + 参数做确定性 JSON 序列化 + SHA-256 截取前 16 位作为调用指纹，配合 30 轮滑动窗口，用三种检测器分级拦截——`generic_repeat`（通用重复）、`ping_pong`（乒乓交替）、`global_circuit_breaker`（全局熔断）；≥5 次告警、≥8 次严重、≥10 次熔断，告警级向模型注入提醒换思路，严重/熔断级直接停止工具调用。
+- **Token 预算**（`loop.ts`）：预算 500000 token，按 input/output/cacheRead/cacheWrite 四类逐轮累计，超过 90% 即告警并强制停止。
+- **API 容错**：单步最多重试 3 次（`MAX_RETRIES`），退避延迟随尝试次数指数增长并叠加随机抖动。
+
 ## 使用说明
 
 ### 1. 环境要求
