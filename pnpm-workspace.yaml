@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
+  # 原生模块：使用内置预编译二进制，跳过本地编译（无需安装 Build Tools）
   better-sqlite3: false
+  sqlite-vec: false
