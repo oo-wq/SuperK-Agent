@@ -5,8 +5,8 @@
  * 结果是什么
  */
 
-import { SubAgentRun, SubAgentConfig } from "./types";
 import { DEFAULT_CONFIG } from "./types";
+import type { SubAgentConfig, SubAgentRun } from "./types";
 
 export class SubAgentRegistry {
   private runs = new Map<string, SubAgentRun>();
@@ -44,20 +44,25 @@ export class SubAgentRegistry {
 
   complete(id: string, result: string): void {
     // 强行完成一个子Agent
-    const run = this.runs.get(id);
-    if (!run) return;
-    run.status = "completed";
-    run.finishedAt = new Date().toISOString();
-    run.result = result;
+    this.finish(id, "completed", { result });
   }
 
   fail(id: string, error: string): void {
     // 强行失败一个子Agent
+    this.finish(id, "error", { error });
+  }
+
+  // 统一收尾：更新状态与完成时间，并写入结果 / 错误信息
+  private finish(
+    id: string,
+    status: "completed" | "error",
+    patch: Partial<Pick<SubAgentRun, "result" | "error">>,
+  ): void {
     const run = this.runs.get(id);
     if (!run) return;
-    run.status = "error";
+    run.status = status;
     run.finishedAt = new Date().toISOString();
-    run.error = error;
+    Object.assign(run, patch);
   }
 
   get(id: string): SubAgentRun | undefined {
@@ -65,7 +70,7 @@ export class SubAgentRegistry {
   }
 
   getActiveRuns(): SubAgentRun[] {
-    return [...this.runs.values()].filter((r) => r.status === "running");
+    return Array.from(this.runs.values()).filter((r) => r.status === "running");
   }
 
   getAllRuns(): SubAgentRun[] {
