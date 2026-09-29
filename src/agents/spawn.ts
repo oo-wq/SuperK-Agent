@@ -12,6 +12,7 @@ export interface SpawnContext {
 }
 
 const EXCLUDED_TOOLS = new Set(["spawn_agent"]); // 不允许子Agent调用spawn_agent工具
+const MAX_STEPS = 30; // 子Agent最多循环步数
 
 const AGENT_COLORS = [
   "\x1b[36m", // cyan
@@ -22,9 +23,30 @@ const AGENT_COLORS = [
 ];
 const RESET = "\x1b[0m";
 
-function agentTag(index: number, runId: string) {
+function agentTag(index: number, runId: string): string {
   const color = AGENT_COLORS[index % AGENT_COLORS.length];
   return `${color}[Agent-${index + 1}:${runId}]${RESET}`;
+}
+
+// 取最后一条 assistant 消息的文本内容；找不到或无可提取文本时返回 undefined
+function lastAssistantText(
+  messages: ModelMessage[],
+  joinSep: string,
+): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.role !== "assistant") continue;
+    const content = message.content;
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .filter((p) => p.type === "text")
+        .map((p) => p.text)
+        .join(joinSep);
+    }
+    return undefined;
+  }
+  return undefined;
 }
 
 export async function spawnAgent(
@@ -47,7 +69,6 @@ export async function spawnAgent(
   ctx.agentRegistry.register(run);
 
   const timeout = request.timeout || 60000;
-  const maxSteps = 30;
   const ac = new AbortController(); // 用于取消子Agent的执行
   console.log(`${tag}启动: ${request.task.slice(0, 50)}`);
 
@@ -74,11 +95,11 @@ export async function spawnAgent(
 
     try {
       let step = 0;
-      while (step < maxSteps) {
+      while (step < MAX_STEPS) {
         step++;
-        const isLastStep = step === maxSteps;
+        const isLastStep = step === MAX_STEPS;
         console.log(
-          `  ${tag} Step ${step}/${maxSteps}${isLastStep ? " (总结)" : ""}`,
+          `  ${tag} Step ${step}/${MAX_STEPS}${isLastStep ? " (总结)" : ""}`,
         );
         if (isLastStep) {
           messages.push({
@@ -115,49 +136,24 @@ export async function spawnAgent(
       clearTimeout(timer);
     }
 
-    // 提取最后一条assistant 回复
-    const lastAssistant = [...messages]
-      .reverse()
-      .find((m) => m.role === "assistant");
-    let result = `(无输出)`;
-    if (lastAssistant) {
-      if (typeof lastAssistant.content === "string") {
-        result = lastAssistant.content;
-      } else if (Array.isArray(lastAssistant.content)) {
-        result = lastAssistant.content
-          .filter((p) => p.type === "text")
-          .map((p) => p.text) // `['xxx','yyy']`
-          .join("\n");
-      }
-    }
+    // 提取最后一条 assistant 回复
+    const result = lastAssistantText(messages, "\n") ?? "(无输出)";
 
     ctx.agentRegistry.complete(runId, result);
     console.log(`${tag} 完成 ✓ (${result.length})字符`);
 
     return result;
-  } catch (err: any) {
-    const isAbort = err.name === "AbortError" || ac.signal.aborted;
+  } catch (err) {
+    const error = err as { name?: string; message?: string };
+    const isAbort = error.name === "AbortError" || ac.signal.aborted;
     const errorMsg = isAbort
       ? `执行超时 (${timeout / 1000}s)`
-      : err.message || String(err);
+      : error.message || String(err);
     ctx.agentRegistry.fail(runId, errorMsg);
     console.log(`  ${tag} ${isAbort ? "超时" : "失败"} ✗: ${errorMsg}`);
     if (isAbort) {
-      const partial = [...messages]
-        .reverse()
-        .find((m) => m.role === "assistant");
-      if (partial) {
-        const text =
-          typeof partial.content === "string"
-            ? partial.content
-            : Array.isArray(partial.content)
-              ? partial.content
-                  .filter((p: any) => p.type === "text")
-                  .map((p: any) => p.text)
-                  .join("")
-              : "";
-        if (text) return `[部分结果] ${text}`; // 子Agent执行超时，返回部分结果，避免父Agent等待过久
-      }
+      const text = lastAssistantText(messages, "");
+      if (text) return `[部分结果] ${text}`; // 子Agent执行超时，返回部分结果，避免父Agent等待过久
     }
     return `[sub-agent 执行失败] ${errorMsg}`;
   }
@@ -168,7 +164,7 @@ export async function spawnParallel(
   ctx: SpawnContext,
 ): Promise<Array<{ task: string; result: string }>> {
   console.log(`\n  ┌─ 派发 ${requests.length} 个子 Agent 并行执行 ─┐`);
-  const results = await Promise.all(  //
+  const results = await Promise.all(
     requests.map(async (req, i) => {
       const result = await spawnAgent(req, ctx, i);
       return { task: req.task, result };
