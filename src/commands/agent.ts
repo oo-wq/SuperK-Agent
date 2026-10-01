@@ -11,12 +11,16 @@ export function createAgentCommands(
     if (runs.length === 0) {
       console.log("  暂无子 Agent 记录");
     } else {
-      const active = runs.filter((r) => r.status === "running");
-      const completed = runs.filter((r) => r.status === "completed");
-      const failed = runs.filter((r) => r.status === "error");
+      let active = 0;
+      let completed = 0;
+      let failed = 0;
 
       console.log(`  子 Agent 记录 (${runs.length}):`);
       for (const r of runs) {
+        if (r.status === "running") active++;
+        else if (r.status === "completed") completed++;
+        else if (r.status === "error") failed++;
+
         const icon =
           r.status === "running" ? "⟳" : r.status === "completed" ? "✓" : "✗";
         const detail =
@@ -33,7 +37,7 @@ export function createAgentCommands(
 
       const config = agentRegistry.getConfig();
       console.log(
-        `\n  活跃: ${active.length}/${config.maxConcurrent} | 完成: ${completed.length} | 失败: ${failed.length}`,
+        `\n  活跃: ${active}/${config.maxConcurrent} | 完成: ${completed} | 失败: ${failed}`,
       );
       console.log(
         `  最大深度: ${config.maxSpawnDepth} | 最大并发: ${config.maxConcurrent}`,
