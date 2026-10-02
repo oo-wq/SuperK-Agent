@@ -9,25 +9,26 @@ export const contextCommands: CommandHandler[] = [
   (cmd, ctx) => {
     if (cmd !== "/context" && cmd !== "context") return false;
 
-    const SYSTEM = ctx.builder.build(ctx.makePromptCtx());
+    const systemPrompt = ctx.builder.build(ctx.makePromptCtx());
     const memoryChars = ctx.memoryStore?.buildPromptSection().length ?? 0;
+    const hasApiKey = Boolean(process.env.DASHSCOPE_API_KEY);
+    const toolDescriptionChars = ctx.registry
+      .getActiveTools()
+      .reduce(
+        (total, tool) =>
+          total +
+          tool.name.length +
+          (tool.description?.length ?? 0) +
+          JSON.stringify(tool.parameters || {}).length,
+        0,
+      );
+
     const snapshot = buildContextSnapshot({
-      modelName: process.env.DASHSCOPE_API_KEY
-        ? "Qwen Plus"
-        : "Mock Model (开发用)",
-      modelId: process.env.DASHSCOPE_API_KEY ? "qwen3-6-plus" : "mock-model",
+      modelName: hasApiKey ? "Qwen Plus" : "Mock Model (开发用)",
+      modelId: hasApiKey ? "qwen3-6-plus" : "mock-model",
       windowTokens: 1_000_000,
-      systemPromptChars: SYSTEM.length,
-      toolDescriptionChars: ctx.registry
-        .getActiveTools()
-        .reduce(
-          (a, t) =>
-            a +
-            t.name.length +
-            (t.description?.length || 0) +
-            JSON.stringify(t.parameters || {}).length,
-          0,
-        ),
+      systemPromptChars: systemPrompt.length,
+      toolDescriptionChars,
       memoryChars,
       skillsChars: 0,
       messages: ctx.messages,
