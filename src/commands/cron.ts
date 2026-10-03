@@ -1,10 +1,19 @@
 import type { CommandHandler } from "./index.js";
 import type { CronService } from "../cron/service.js";
 
+const CRON_PREFIX = "/cron";
+
+// 任务状态对应的显示图标（未列出的状态统一用 ·）
+const JOB_STATUS_ICONS: Record<string, string> = {
+  running: "⟳",
+  scheduled: "◉",
+  disabled: "○",
+};
+
 export function createCronCommands(cronService: CronService): CommandHandler[] {
   const handler: CommandHandler = (cmd) => {
-    if (!cmd.startsWith("/cron")) return false;
-    const sub = cmd.slice(5).trim();
+    if (!cmd.startsWith(CRON_PREFIX)) return false;
+    const sub = cmd.slice(CRON_PREFIX.length).trim();
 
     if (!sub || sub === "list") {
       const jobs = cronService.list();
@@ -13,14 +22,7 @@ export function createCronCommands(cronService: CronService): CommandHandler[] {
       } else {
         console.log(`  定时任务 (${jobs.length}):`);
         for (const j of jobs) {
-          const icon =
-            j.status === "running"
-              ? "⟳"
-              : j.status === "scheduled"
-                ? "◉"
-                : j.status === "disabled"
-                  ? "○"
-                  : "·";
+          const icon = JOB_STATUS_ICONS[j.status] ?? "·";
           console.log(
             `    ${icon} ${j.config.id} — ${j.config.name} [${j.config.schedule}] (${j.status})`,
           );
