@@ -1,4 +1,4 @@
-import { type ModelMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { agentLoop } from "../agent/loop.js";
 import type { CommandHandler } from "./index.js";
 
@@ -37,10 +37,11 @@ export const dreamCommands: CommandHandler[] = [
     ).then(() => {
       const newMessages = ctx.messages.slice(beforeLen);
       const now = Date.now();
-      for (let i = beforeLen; i < ctx.messages.length; i++)
+      for (let i = beforeLen; i < ctx.messages.length; i++) {
         ctx.timestamps.set(i, now);
+      }
       ctx.sessionStore.appendAll(newMessages);
-      console.log(`  [dream 完成]\n`);
+      console.log("  [dream 完成]\n");
       ctx.ask();
     });
 
