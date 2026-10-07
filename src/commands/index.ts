@@ -15,10 +15,11 @@ export interface CommandContext {
   builder: PromptBuilder;
   tracker: UsageTracker;
   sessionStore: SessionStore;
-  model: any;
+  model: any; // 模型实例（mock 模型未严格实现 LanguageModel 结构，保持 any）
   makePromptCtx: () => PromptContext;
   ask: () => void;
   memoryStore?: MemoryStore;
+  // 扩展逃逸口：允许注入 vectorStore 等额外依赖（见 rag.ts 的 ctx.vectorStore）
   [key: string]: any;
 }
 
