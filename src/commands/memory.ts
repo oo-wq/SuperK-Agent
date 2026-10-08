@@ -1,12 +1,18 @@
 import type { CommandHandler } from "./index.js";
+import type { MemoryEntry } from "../memory/store.js";
+
+function printEntries(entries: MemoryEntry[]): void {
+  for (const e of entries) {
+    console.log(`  [${e.type}] ${e.name} — ${e.description}`);
+  }
+}
 
 export const memoryCommands: CommandHandler[] = [
   (cmd, ctx) => {
     if (cmd !== "/memory" && cmd !== "memory") return false;
     const entries = ctx.memoryStore!.list();
     console.log(`\n[记忆系统] 共 ${entries.length} 条记忆`);
-    for (const e of entries)
-      console.log(`  [${e.type}] ${e.name} — ${e.description}`);
+    printEntries(entries);
     console.log("");
     return true;
   },
@@ -16,8 +22,7 @@ export const memoryCommands: CommandHandler[] = [
     const query = cmd.slice("/memory search ".length).trim();
     const results = ctx.memoryStore!.search(query);
     console.log(`\n[记忆搜索] "${query}" → ${results.length} 条结果`);
-    for (const e of results)
-      console.log(`  [${e.type}] ${e.name} — ${e.description}`);
+    printEntries(results);
     console.log("");
     return true;
   },
@@ -34,8 +39,9 @@ export const memoryCommands: CommandHandler[] = [
       console.log(
         `  📁 ${r.entry.filePath.split("/").pop()}  [${r.entry.type}] ${r.entry.name}`,
       );
-      for (const issue of r.issues)
+      for (const issue of r.issues) {
         console.log(`     • ${issue.kind}: ${issue.message}`);
+      }
     }
     console.log("");
     return true;
