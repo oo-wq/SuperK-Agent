@@ -12,8 +12,9 @@ export function createPluginCommands(
       if (cmd !== "/plugin" && cmd !== "/plugin list") return false;
 
       const loaded = pluginManager.list();
+      const loadedNames = new Set(loaded.map((p) => p.name));
       const unloaded = Array.from(availablePlugins.entries()).filter(
-        ([name]) => !loaded.find((p) => p.name === name),
+        ([name]) => !loadedNames.has(name),
       );
 
       if (loaded.length === 0 && unloaded.length === 0) {
@@ -62,7 +63,9 @@ export function createPluginCommands(
           console.log(
             `\n[plugins] 已加载 ${name}，注册了 ${tools.length} 个工具：`,
           );
-          for (const t of tools) console.log(`    ${t}`);
+          for (const t of tools) {
+            console.log(`    ${t}`);
+          }
           console.log("");
         })
         .catch((err) => {
