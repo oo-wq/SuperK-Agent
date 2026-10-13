@@ -1,6 +1,6 @@
 import type { CommandHandler } from "./index.js";
-import type { ToolRegistry } from "../tools/registry";
-import type { HookPipeline } from "../security/hook";
+import type { ToolRegistry } from "../tools/registry.js";
+import type { HookPipeline } from "../security/hook.js";
 import type { Role } from "../security/roles.js";
 
 export function createSecurityCommands(
@@ -38,11 +38,15 @@ export function createSecurityCommands(
       console.log("\n[hooks]");
       if (hooks.pre.length > 0) {
         console.log("  Pre-Tool Hooks:");
-        for (const name of hooks.pre) console.log(`    - ${name}`);
+        for (const name of hooks.pre) {
+          console.log(`    - ${name}`);
+        }
       }
       if (hooks.post.length > 0) {
         console.log("  Post-Tool Hooks:");
-        for (const name of hooks.post) console.log(`    - ${name}`);
+        for (const name of hooks.post) {
+          console.log(`    - ${name}`);
+        }
       }
       if (hooks.pre.length === 0 && hooks.post.length === 0) {
         console.log("  没有注册的 Hook");
