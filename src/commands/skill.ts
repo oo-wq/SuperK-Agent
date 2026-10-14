@@ -3,58 +3,73 @@ import { agentLoop } from "../agent/loop.js";
 import type { CommandHandler } from "./index.js";
 import type { SkillLoader } from "../skills/loader.js";
 
+// skill 命令输出前缀（统一日志标签）
+const SKILLS_TAG = "[skills]";
+// /skill load|unload <name> 子命令解析正则
+const SKILL_SUB_RE = /^\/skill\s+(load|unload)\s+(\S+)$/;
+
+function parseSkillSubcommand(
+  cmd: string,
+): { action: "load" | "unload"; name: string } | null {
+  const match = cmd.match(SKILL_SUB_RE);
+  if (!match) return null;
+  return { action: match[1] as "load" | "unload", name: match[2] };
+}
+
 export function createSkillCommands(
   skillLoader: SkillLoader,
   activeSkills: Set<string>,
 ): CommandHandler[] {
   return [
     // /skill list
-    (cmd, ctx) => {
+    (cmd, _ctx) => {
       if (cmd !== "/skill" && cmd !== "/skill list" && cmd !== "skill list")
         return false;
       const skills = skillLoader.list();
       if (skills.length === 0) {
         console.log(
-          "\n[skills] 没有找到任何 skill。在 .skills/ 目录下创建 skill-name/SKILL.md 即可。\n",
+          `\n${SKILLS_TAG} 没有找到任何 skill。在 .skills/ 目录下创建 skill-name/SKILL.md 即可。\n`,
         );
         return true;
       }
-      console.log(`\n[skills] 共 ${skills.length} 个可用：`);
+      console.log(`\n${SKILLS_TAG} 共 ${skills.length} 个可用：`);
       for (const s of skills) {
         const active = activeSkills.has(s.name) ? " ✓ 已激活" : "";
         console.log(`  /${s.name} — ${s.description}${active}`);
-        if (s.whenToUse) console.log(`    适用场景: ${s.whenToUse}`);
+        if (s.whenToUse) {
+          console.log(`    适用场景: ${s.whenToUse}`);
+        }
       }
       console.log("");
       return true;
     },
 
     // /skill load <name>
-    (cmd, ctx) => {
-      const match = cmd.match(/^\/skill\s+load\s+(\S+)$/);
-      if (!match) return false;
-      const name = match[1];
+    (cmd, _ctx) => {
+      const sub = parseSkillSubcommand(cmd);
+      if (!sub || sub.action !== "load") return false;
+      const name = sub.name;
       const skill = skillLoader.get(name);
       if (!skill) {
-        console.log(`\n[skills] 找不到 skill: ${name}\n`);
+        console.log(`\n${SKILLS_TAG} 找不到 skill: ${name}\n`);
         return true;
       }
       activeSkills.add(name);
-      console.log(`\n[skills] 已激活: ${name} — ${skill.description}\n`);
+      console.log(`\n${SKILLS_TAG} 已激活: ${name} — ${skill.description}\n`);
       return true;
     },
 
     // /skill unload <name>
-    (cmd, ctx) => {
-      const match = cmd.match(/^\/skill\s+unload\s+(\S+)$/);
-      if (!match) return false;
-      const name = match[1];
+    (cmd, _ctx) => {
+      const sub = parseSkillSubcommand(cmd);
+      if (!sub || sub.action !== "unload") return false;
+      const name = sub.name;
       if (!activeSkills.has(name)) {
-        console.log(`\n[skills] ${name} 未激活\n`);
+        console.log(`\n${SKILLS_TAG} ${name} 未激活\n`);
         return true;
       }
       activeSkills.delete(name);
-      console.log(`\n[skills] 已卸载: ${name}\n`);
+      console.log(`\n${SKILLS_TAG} 已卸载: ${name}\n`);
       return true;
     },
 
@@ -67,7 +82,7 @@ export function createSkillCommands(
       if (!skill) return false;
 
       activeSkills.add(name);
-      console.log(`\n[skills] 激活 ${name}，开始执行...`);
+      console.log(`\n${SKILLS_TAG} 激活 ${name}，开始执行...`);
 
       const args = parts.slice(1).join(" ");
       const content = args
