@@ -3,19 +3,24 @@ import { SuperKAgentConfigSchema, type SuperKAgentConfig } from "./schema.js";
 
 export const CONFIG_FILE = "superk-agent.config.json";
 
+// 匹配 "${VAR_NAME}" 形式的环境变量占位符
 const ENV_VAR_RE = /\$\{([A-Z_][A-Z0-9_]*)\}/g;
 
+// 替换单个字符串中的环境变量占位符；未设置时保留原值并告警
+function substituteString(value: string): string {
+  return value.replace(ENV_VAR_RE, (fullMatch, name: string) => {
+    const val = process.env[name];
+    if (val === undefined) {
+      console.warn(`  ⚠ 环境变量 ${name} 未设置，保留原值`);
+      return fullMatch;
+    }
+    return val;
+  });
+}
+
+// 递归遍历配置对象，替换所有字符串字段中的环境变量占位符
 function substituteEnvVars(obj: unknown): unknown {
-  if (typeof obj === "string") {
-    return obj.replace(ENV_VAR_RE, (match, name) => {
-      const val = process.env[name];
-      if (val === undefined) {
-        console.warn(`  ⚠ 环境变量 ${name} 未设置，保留原值`);
-        return match;
-      }
-      return val;
-    });
-  }
+  if (typeof obj === "string") return substituteString(obj);
   if (Array.isArray(obj)) return obj.map(substituteEnvVars);
   if (obj !== null && typeof obj === "object") {
     const result: Record<string, unknown> = {};
