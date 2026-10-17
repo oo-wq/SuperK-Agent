@@ -49,17 +49,22 @@ export const UsageConfigSchema = z.object({
   trackingFile: z.string().default(".usage/today.jsonl"),
 });
 
+// 为子 schema 提供默认值：解析空对象得到的完整默认配置
+function withDefault<T extends z.ZodType>(schema: T) {
+  return schema.default(schema.parse({}) as never);
+}
+
 export const SuperKAgentConfigSchema = z.object({
   version: z.string().default("1.0"),
-  model: ModelConfigSchema.default(ModelConfigSchema.parse({})),
+  model: withDefault(ModelConfigSchema),
   plugins: z.array(PluginConfigSchema).default([]),
-  agents: AgentConfigSchema.default(AgentConfigSchema.parse({})),
-  security: SecurityConfigSchema.default(SecurityConfigSchema.parse({})),
-  memory: MemoryConfigSchema.default(MemoryConfigSchema.parse({})),
-  rag: RagConfigSchema.default(RagConfigSchema.parse({})),
-  cron: CronConfigSchema.default(CronConfigSchema.parse({})),
-  session: SessionConfigSchema.default(SessionConfigSchema.parse({})),
-  usage: UsageConfigSchema.default(UsageConfigSchema.parse({})),
+  agents: withDefault(AgentConfigSchema),
+  security: withDefault(SecurityConfigSchema),
+  memory: withDefault(MemoryConfigSchema),
+  rag: withDefault(RagConfigSchema),
+  cron: withDefault(CronConfigSchema),
+  session: withDefault(SessionConfigSchema),
+  usage: withDefault(UsageConfigSchema),
 });
 
 export type SuperKAgentConfig = z.infer<typeof SuperKAgentConfigSchema>;
