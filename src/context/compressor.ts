@@ -4,24 +4,30 @@ import {
   toolResultOutputToText,
 } from "./tool-result-output";
 
-// 计算对话历史的token数量
+// 粗略估算：每 token 约对应 4 个字符
+const CHARS_PER_TOKEN = 4;
+
+// 将消息 content（字符串或 part 数组）拼接为纯文本
+function contentToText(content: ModelMessage["content"]): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if ("text" in part && typeof part.text === "string") return part.text;
+      if ("output" in part) return toolResultOutputToText(part.output);
+      return "";
+    })
+    .join("");
+}
+
+// 计算对话历史的 token 数量
 export function estimateTokens(messages: ModelMessage[]) {
   let chars = 0;
   for (const msg of messages) {
-    if (typeof msg.content === "string") {
-      chars += msg.content.length;
-    } else if (Array.isArray(msg.content)) {
-      for (const part of msg.content) {
-        if ("text" in part && typeof part.text === "string") {
-          chars += part.text.length;
-        } else if ("output" in part) {
-          chars += (toolResultOutputToText(part.output) as string).length;
-        }
-      }
-    }
+    chars += contentToText(msg.content).length;
   }
 
-  return Math.ceil(chars / 4);
+  return Math.ceil(chars / CHARS_PER_TOKEN);
 }
 
 // 允许被压缩的工具
@@ -46,20 +52,23 @@ export function microcompact(messages: ModelMessage[]) {
     }
   }
 
-  // 保留最近3个工具调用结果
-  const toClear = toolResultIndices.slice(
-    0,
-    Math.max(0, toolResultIndices.length - KEEP_RECENT_TOOL_RESULT),
+  // 保留最近3个工具调用结果，其余加入待压缩集合
+  const toClear = new Set(
+    toolResultIndices.slice(
+      0,
+      Math.max(0, toolResultIndices.length - KEEP_RECENT_TOOL_RESULT),
+    ),
   );
 
   let cleared = 0;
   const result = messages.map((msg, idx) => {
-    if (!toClear.includes(idx)) return msg;
+    if (!toClear.has(idx)) return msg;
     if (msg.role !== "tool" || !Array.isArray(msg.content)) return msg;
 
     // 不允许压缩的工具
-    const toolName = (msg.content[0] as any)?.toolName || "unknown";
-    if (!CLEARABLE_TOOLS.has(toolName)) return msg;
+    const first = msg.content[0];
+    if (!first || first.type !== "tool-result") return msg;
+    if (!CLEARABLE_TOOLS.has(first.toolName)) return msg;
 
     cleared++;
     return {
@@ -134,20 +143,7 @@ export async function summarize(
   // 将用户消息、LLM消息、工具调用结果拼接为一个字符串
   const conversationText = toCompress
     .map((msg) => {
-      const content =
-        typeof msg.content === "string"
-          ? msg.content
-          : Array.isArray(msg.content)
-            ? msg.content
-                .map((part) =>
-                  "text" in part
-                    ? part.text
-                    : "output" in part
-                      ? toolResultOutputToText(part.output)
-                      : "",
-                )
-                .join("")
-            : "";
+      const content = contentToText(msg.content);
       return content ? `**${msg.role}**: ${content}` : "";
     })
     .filter(Boolean)
