@@ -4,6 +4,13 @@ import {
   textToolResultOutput,
 } from "./tool-result-output";
 
+// 粗略估算：每 token 约对应 4 个字符
+const CHARS_PER_TOKEN = 4;
+// 中文场景的安全系数（token 估算再乘以 1.2）
+const CHINESE_SAFETY_FACTOR = 1.2;
+// 上下文窗口大小（token 数）
+const CONTEXT_WINDOW = 200_000;
+
 export class TokenTracker {
   private lastPreciseCount = 0; // 上一次API返回的token用量
   private pendingChars = 0; // 新增消息的字符数
@@ -30,7 +37,7 @@ export class TokenTracker {
   get estimateTokens(): number {
     return Math.max(
       0,
-      this.lastPreciseCount + Math.ceil(this.pendingChars / 4),
+      this.lastPreciseCount + Math.ceil(this.pendingChars / CHARS_PER_TOKEN),
     );
   }
 
@@ -45,15 +52,11 @@ export class TokenTracker {
   }
 }
 
-const CONTEXT_WINDOW = 200_000;
-
 function countMessageChars(message: ModelMessage): number {
-  let chars = 0;
-  if (typeof message.content === "string") {
-    return message.content.length;
-  }
-  if (!Array.isArray(message.content)) return chars;
+  if (typeof message.content === "string") return message.content.length;
+  if (!Array.isArray(message.content)) return 0;
 
+  let chars = 0;
   for (const part of message.content) {
     if ("text" in part && typeof part.text === "string") {
       chars += part.text.length;
@@ -77,7 +80,7 @@ function countMessagesChars(messages: ModelMessage[]): number {
 
 export function estimateMessageTokens(messages: ModelMessage[]): number {
   const chars = countMessagesChars(messages); // 所有消息的字符数
-  return Math.ceil((chars / 4) * 1.2); // 1.2x 中文安全系数
+  return Math.ceil((chars / CHARS_PER_TOKEN) * CHINESE_SAFETY_FACTOR); // 1.2x 中文安全系数
 }
 
 // 2 ----------------------------------
@@ -224,7 +227,11 @@ export function ttlPrune(
     // 10 分钟之前...
     if (age >= config.hardTTLMs) {
       hardPruned++;
-      const toolName = (msg.content[0] as any)?.toolName || "unknown";
+      const first = msg.content[0];
+      const toolName =
+        first && first.type === "tool-result" && first.toolName
+          ? first.toolName
+          : "unknown";
       return {
         ...msg,
         content: (msg.content as any[]).map((p: any) => ({
