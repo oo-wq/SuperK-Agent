@@ -8,7 +8,7 @@ export interface PromptContext {
 type PipeFn = (ctx: PromptContext) => string | null;
 
 export class PromptBuilder {
-  private pipes: Array<{ name: string; fn: PipeFn }> = []; // 存放所有需要的系统提示词
+  private pipes: { name: string; fn: PipeFn }[] = []; // 存放所有需要的系统提示词
 
   pipe(name: string, fn: PipeFn): this {
     this.pipes.push({ name, fn });
@@ -29,19 +29,19 @@ export class PromptBuilder {
   }
 
   debug(ctx: PromptContext): void {
-    console.log(`\n=== Prompt Pipe Debug ===`);
+    console.log("\n=== Prompt Pipe Debug ===");
     for (const { name, fn } of this.pipes) {
       const result = fn(ctx);
-      const status = result !== null ? `[ON] ${result.length} chars` : `[OFF]`;
+      const status = result !== null ? `[ON] ${result.length} chars` : "[OFF]";
       console.log(`${name}: ${status}`);
     }
-    console.log(`=== Prompt Debug End ===`);
+    console.log("=== Prompt Debug End ===");
   }
 }
 
 // 预定义 pipe
 export function coreRules(): PipeFn {
-  return (ctx) => `你是 SuperK-Agent，一个有工具调用能力的 AI 助手。
+  return () => `你是 SuperK-Agent，一个有工具调用能力的 AI 助手。
 你的行为准则：
 - 先读文件再修改，不要凭记忆编辑
 - 不要加没被要求的功能
