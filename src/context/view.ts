@@ -51,13 +51,15 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
+const MATRIX_SIZE = 16; // 矩阵边长（16×16 = 256 格）
+
 /**
  * 画一个 16×16 = 256 格的矩阵，每格代表 window/256 个 tokens。
  * 已用部分按 slices 顺序填彩色 ●，free 用 ○，autocompact buffer 用 ▢。
  */
 export function renderContextMatrix(snapshot: ContextSnapshot): string {
   const { windowTokens, slices, autocompactBufferTokens } = snapshot;
-  const TOTAL_CELLS = 256;
+  const TOTAL_CELLS = MATRIX_SIZE * MATRIX_SIZE;
   const tokensPerCell = windowTokens / TOTAL_CELLS;
 
   // 把每个 slice 的 token 数转成"格子数"（向上取整避免 0 格丢失）
@@ -81,10 +83,10 @@ export function renderContextMatrix(snapshot: ContextSnapshot): string {
     cells.push(-2);
 
   const lines: string[] = [];
-  for (let row = 0; row < 16; row++) {
+  for (let row = 0; row < MATRIX_SIZE; row++) {
     const rowCells: string[] = [];
-    for (let col = 0; col < 16; col++) {
-      const idx = row * 16 + col;
+    for (let col = 0; col < MATRIX_SIZE; col++) {
+      const idx = row * MATRIX_SIZE + col;
       const c = cells[idx];
       if (c === -1) rowCells.push(fg(COLORS.free, "○"));
       else if (c === -2) rowCells.push(fg(COLORS.buffer, "▢"));
@@ -101,7 +103,7 @@ export function renderContextLegend(snapshot: ContextSnapshot): string {
   const lines: string[] = [];
 
   lines.push(
-    fg(COLORS.text, fg(255, "\x1b[1m") + snapshot.modelName + "\x1b[0m"),
+    fg(COLORS.text, fg(COLORS.text, "\x1b[1m") + snapshot.modelName + "\x1b[0m"),
   );
   lines.push(fg(COLORS.dim, snapshot.modelId));
   lines.push(
@@ -116,9 +118,9 @@ export function renderContextLegend(snapshot: ContextSnapshot): string {
     const value = `${fmtTokens(s.tokens)} tokens (${pct(s.tokens, windowTokens)})`;
     lines.push(`${dot} ${label}: ${value}`);
   }
-  const free = windowTokens - usedTokens - autocompactBufferTokens;
+  const free = Math.max(0, windowTokens - usedTokens - autocompactBufferTokens);
   lines.push(
-    `${fg(COLORS.free, "○")}  Free space: ${fmtTokens(Math.max(0, free))} (${pct(Math.max(0, free), windowTokens)})`,
+    `${fg(COLORS.free, "○")}  Free space: ${fmtTokens(free)} (${pct(free, windowTokens)})`,
   );
   lines.push(
     `${fg(COLORS.buffer, "▢")}  Autocompact buffer: ${fmtTokens(autocompactBufferTokens)} (${pct(autocompactBufferTokens, windowTokens)})`,
@@ -158,6 +160,11 @@ export interface BuildSnapshotInput {
 }
 
 const CHARS_PER_TOKEN = 3.5;
+// 每个工具调用/结果的固定开销（估算时计入）
+const TOOL_OVERHEAD_CHARS = 80;
+// 默认 autocompact buffer 占窗口的比例（5%）
+const DEFAULT_BUFFER_RATIO = 0.05;
+
 function approxTokensFromChars(chars: number): number {
   return Math.ceil(chars / CHARS_PER_TOKEN);
 }
@@ -170,13 +177,13 @@ function approxMessageTokens(messages: ModelMessage[]): number {
       for (const part of m.content as any[]) {
         if (part.type === "text") chars += (part.text || "").length;
         else if (part.type === "tool-call")
-          chars += JSON.stringify(part.input || {}).length + 80;
+          chars += JSON.stringify(part.input || {}).length + TOOL_OVERHEAD_CHARS;
         else if (part.type === "tool-result") {
           const out = part.output;
           if (typeof out === "string") chars += out.length;
           else if (out?.value) chars += String(out.value).length;
           else chars += JSON.stringify(out || {}).length;
-          chars += 80;
+          chars += TOOL_OVERHEAD_CHARS;
         }
       }
     }
@@ -227,7 +234,8 @@ export function buildContextSnapshot(
     usedTokens,
     slices,
     autocompactBufferTokens:
-      input.autocompactBufferTokens ?? Math.round(input.windowTokens * 0.05),
+      input.autocompactBufferTokens ??
+      Math.round(input.windowTokens * DEFAULT_BUFFER_RATIO),
   };
 }
 
