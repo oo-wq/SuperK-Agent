@@ -1,17 +1,19 @@
 import type { ToolResultPart } from "ai";
 
-// 工具调用的结果输出xxxxxx ==> [tool result cleared]
+// ToolResultOutput 与纯文本之间的互转（压缩/截断时用文本替换工具结果）
 
 type ToolResultOutput = ToolResultPart["output"];
 
 export function textToolResultOutput(value: string): ToolResultOutput {
   return {
     type: "text",
-    value: value,
+    value,
   };
 }
 
-export function toolResultOutputToText(output: ToolResultOutput) {
+export function toolResultOutputToText(
+  output: ToolResultOutput,
+): string | undefined {
   switch (output.type) {
     case "text":
     case "error-text":
