@@ -20,6 +20,20 @@ const QUOTES = [
   '"First, solve the problem. Then, write the code." —— John Johnson',
 ];
 
+// 任务默认超时时间（60 秒）
+const DEFAULT_TIMEOUT_MS = 60_000;
+// 任务连续失败多少次后自动禁用
+const DEFAULT_MAX_RETRIES = 3;
+// 日志输出最大保留字符数
+const LOG_OUTPUT_LIMIT = 1000;
+// 通知消息输出最大保留字符数
+const NOTIFY_OUTPUT_LIMIT = 200;
+
+// 将 catch 到的未知错误转成可读消息
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export interface CronExecutor {
   runAgentPrompt: (prompt: string, timeout?: number) => Promise<string>;
   notify?: (message: string) => void;
@@ -117,7 +131,7 @@ export class CronService {
     return true;
   }
 
-  list(): Array<{ config: CronJobConfig; status: string; lastRun?: RunLog }> {
+  list(): { config: CronJobConfig; status: string; lastRun?: RunLog }[] {
     return Array.from(this.jobs.values()).map((state) => ({
       config: state.config,
       status: state.running
@@ -174,8 +188,8 @@ export class CronService {
           this.remove(state.config.id);
         }
       }, delayMs);
-    } catch (err: any) {
-      console.log(`  [cron] ✗ 调度失败 ${state.config.id}: ${err.message}`);
+    } catch (err) {
+      console.log(`  [cron] ✗ 调度失败 ${state.config.id}: ${errorMessage(err)}`);
     }
   }
 
@@ -187,15 +201,16 @@ export class CronService {
     let status: RunLog["status"] = "success";
     let error: string | undefined;
     try {
-      const timeout = state.config.timeout || 60000;
+      const timeout = state.config.timeout || DEFAULT_TIMEOUT_MS;
       output = await this.runPayload(state.config.payload, timeout);
       state.consecutiveFailures = 0;
-    } catch (err: any) {
-      status = err.message?.includes("timeout") ? "timeout" : "error";
-      error = err.message;
-      output = `执行失败: ${err.message}`;
+    } catch (err) {
+      const message = errorMessage(err);
+      status = message.includes("timeout") ? "timeout" : "error";
+      error = message;
+      output = `执行失败: ${message}`;
       state.consecutiveFailures++;
-      const maxRetries = state.config.maxRetries ?? 3;
+      const maxRetries = state.config.maxRetries ?? DEFAULT_MAX_RETRIES;
       if (state.consecutiveFailures >= maxRetries) {
         state.config.enabled = false;
         console.log(
@@ -212,7 +227,7 @@ export class CronService {
       startedAt,
       finishedAt: new Date().toISOString(),
       status,
-      output: output.slice(0, 1000),
+      output: output.slice(0, LOG_OUTPUT_LIMIT),
       error,
     };
     state.lastRun = log;
@@ -220,7 +235,7 @@ export class CronService {
     if (this.executor?.notify) {
       const icon = status === "success" ? "✓" : "✗";
       this.executor.notify(
-        `[cron] ${icon} ${state.config.name}: ${output.slice(0, 200)}`,
+        `[cron] ${icon} ${state.config.name}: ${output.slice(0, NOTIFY_OUTPUT_LIMIT)}`,
       );
     }
     return output;
