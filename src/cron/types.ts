@@ -1,4 +1,8 @@
 export type ScheduleType = "cron" | "interval" | "once";
+// 任务来源：config 由配置文件管理，runtime 由运行时增删
+export type JobSource = "config" | "runtime";
+// 一次执行的结果状态
+export type RunStatus = "success" | "error" | "timeout";
 
 export interface CronJobConfig {
   id: string; // 任务唯一标识
@@ -10,7 +14,7 @@ export interface CronJobConfig {
   payload: JobPayload; // 执行内容（agent prompt 或 handler 回调）
   timeout?: number; // 单次执行超时，单位 ms，默认 60000
   maxRetries?: number; // 连续失败多少次后自动禁用，默认 3
-  source: "config" | "runtime"; // 来源：config 不可删，runtime 可增删
+  source: JobSource; // 来源：config 不可删，runtime 可增删
 }
 
 export type JobPayload =
@@ -21,7 +25,7 @@ export interface RunLog {
   jobId: string; // 所属任务 ID
   startedAt: string; // 开始时间 ISO 字符串
   finishedAt: string; // 结束时间 ISO 字符串
-  status: "success" | "error" | "timeout"; // 执行结果
+  status: RunStatus; // 执行结果
   output?: string; // 执行输出（截断到 1000 字符）
   error?: string; // 错误信息
 }
