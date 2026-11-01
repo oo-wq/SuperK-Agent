@@ -2,7 +2,10 @@ import type { MemoryEntry } from "./store";
 import path from "path";
 import fs from "fs";
 
-const TTL_BY_TYPE: Record<string, number> = {
+// 一天的毫秒数（用于计算记忆距离上次读已过多少天）
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const TTL_BY_TYPE: Record<MemoryEntry["type"], number> = {
   user: 365, // 用户偏好
   feedback: 90, // 纠正反馈
   project: 30, // 项目决策
@@ -51,8 +54,8 @@ export function validateEntry(
 
   // 按类型 TTL 判断长期未用
   if (entry.lastReadAt) {
-    const staleDays = TTL_BY_TYPE[entry.type] ?? 30;
-    const days = (Date.now() - entry.lastReadAt) / (1000 * 60 * 60 * 24);
+    const staleDays = TTL_BY_TYPE[entry.type];
+    const days = (Date.now() - entry.lastReadAt) / MS_PER_DAY;
     if (days > staleDays) {
       issues.push({
         kind: "never_used",
@@ -77,10 +80,11 @@ export function lintAll(
 
   for (const entry of entries) {
     const issues = validateEntry(entry, baseDir);
-    if ((nameCount.get(entry.name) || 0) > 1) {
+    const count = nameCount.get(entry.name) || 0;
+    if (count > 1) {
       issues.push({
         kind: "duplicate_name",
-        message: `存在 ${nameCount.get(entry.name)} 条同名记忆，可能需要合并`,
+        message: `存在 ${count} 条同名记忆，可能需要合并`,
       });
     }
     if (issues.length > 0) reports.push({ entry, issues });
