@@ -6,9 +6,14 @@ interface LoadedPlugin {
   tools: string[];
 }
 
+// 将 catch 到的未知错误转成可读消息
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export class PluginManager {
   private plugins = new Map<string, LoadedPlugin>();
-  private registry: ToolRegistry = {} as ToolRegistry;
+  private registry: ToolRegistry;
 
   constructor(registry: ToolRegistry) {
     this.registry = registry;
@@ -49,7 +54,7 @@ export class PluginManager {
     try {
       await definition.activate(api); // 激活插件
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = errorMessage(error);
       console.error(`[Plugin: ${definition.name}] 激活失败:${msg}`);
       throw error;
     }
@@ -70,7 +75,7 @@ export class PluginManager {
       try {
         await plugin.definition.destroy();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errorMessage(err);
         console.error(`  [plugin:${name}] destroy 出错: ${msg}`);
       }
     }
@@ -94,12 +99,12 @@ export class PluginManager {
     return this.plugins.get(name);
   }
 
-  list(): Array<{
+  list(): {
     name: string;
     version: string;
     description: string;
     tools: string[];
-  }> {
+  }[] {
     return Array.from(this.plugins.values()).map((p) => ({
       name: p.definition.name,
       version: p.definition.version,
