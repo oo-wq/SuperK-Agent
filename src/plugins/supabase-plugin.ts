@@ -1,5 +1,46 @@
 import type { PluginDefinition, PluginApi } from "./types.js";
 
+// 未配置 Supabase 时使用的模拟数据
+const MOCK_DATA: Record<string, Record<string, unknown>[]> = {
+  users: [
+    {
+      id: 1,
+      name: "张三",
+      email: "zhang@example.com",
+      role: "admin",
+    },
+    { id: 2, name: "李四", email: "li@example.com", role: "user" },
+    {
+      id: 3,
+      name: "王五",
+      email: "wang@example.com",
+      role: "user",
+    },
+  ],
+  posts: [
+    {
+      id: 1,
+      title: "Agent 开发入门",
+      author_id: 1,
+      status: "published",
+    },
+    {
+      id: 2,
+      title: "Plugin 架构设计",
+      author_id: 1,
+      status: "draft",
+    },
+  ],
+  comments: [{ id: 1, post_id: 1, user_id: 2, content: "写得不错！" }],
+  sessions: [
+    {
+      id: "sess-001",
+      user_id: 1,
+      created_at: "2026-05-01T10:00:00Z",
+    },
+  ],
+};
+
 export const supabasePlugin: PluginDefinition = {
   name: "supabase",
   version: "1.0.0",
@@ -61,48 +102,7 @@ export const supabasePlugin: PluginDefinition = {
         }) => {
           const { table, select = "*", where, limit = 10 } = input;
           if (!url) {
-            const mockData: Record<string, any[]> = {
-              users: [
-                {
-                  id: 1,
-                  name: "张三",
-                  email: "zhang@example.com",
-                  role: "admin",
-                },
-                { id: 2, name: "李四", email: "li@example.com", role: "user" },
-                {
-                  id: 3,
-                  name: "王五",
-                  email: "wang@example.com",
-                  role: "user",
-                },
-              ],
-              posts: [
-                {
-                  id: 1,
-                  title: "Agent 开发入门",
-                  author_id: 1,
-                  status: "published",
-                },
-                {
-                  id: 2,
-                  title: "Plugin 架构设计",
-                  author_id: 1,
-                  status: "draft",
-                },
-              ],
-              comments: [
-                { id: 1, post_id: 1, user_id: 2, content: "写得不错！" },
-              ],
-              sessions: [
-                {
-                  id: "sess-001",
-                  user_id: 1,
-                  created_at: "2026-05-01T10:00:00Z",
-                },
-              ],
-            };
-            const rows = mockData[table] || [];
+            const rows = MOCK_DATA[table] || [];
             let filtered = rows;
             if (where) {
               const [field, value] = where.split("=");
