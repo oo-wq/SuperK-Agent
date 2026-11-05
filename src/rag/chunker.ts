@@ -6,58 +6,68 @@ export interface Chunk {
   tokenEstimate: number;
 }
 
-const TARGET_TOKEN = 256; // 目标token数
-const CHARS_PER_TOKEN = 4; // 每个token的字符数
-const TARGET_CHARS = TARGET_TOKEN * CHARS_PER_TOKEN; // 目标字符数
+const TARGET_TOKEN = 256; // 目标 token 数
+const CHARS_PER_TOKEN = 4; // 每个 token 对应的字符数
+const TARGET_CHARS = TARGET_TOKEN * CHARS_PER_TOKEN; // 单个分块的目标字符数
+
+const PARAGRAPH_SPLIT = /\n{2,}/; // 按空行切分段落
+const SENTENCE_SPLIT = /(?<=[。！？.!?])\s*/; // 按句末标点切分句子
+const PARAGRAPH_SEPARATOR = "\n\n"; // 段落间连接符
+const SENTENCE_SEPARATOR = " "; // 句子间连接符
 
 export function chunkDocument(source: string, text: string): Chunk[] {
-  const paragraphs = text.split(/\n{2,}/); // ['段落1', '段落2', ...]
   const chunks: Chunk[] = [];
   let current = "";
   let idx = 0;
 
-  for (const para of paragraphs) {
-    const trimmed = para.trim();
-    if (trimmed.length === 0) continue;
+  // 将缓冲区内容落盘为一个分块
+  const flush = (buffer: string): void => {
+    chunks.push(makeChunk(source, buffer.trim(), idx++));
+  };
 
-    // 缓冲区 + 新段落 > 目标字符数，先将缓冲区中的内容存起来
-    if (current.length + trimmed.length + 2 > TARGET_CHARS && current.length > 0) {
-      // 这一段达到了最大字符数
-      chunks.push(makeChunk(source, current.trim(), idx++));
+  for (const para of text.split(PARAGRAPH_SPLIT)) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+
+    // 缓冲区再加一个段落会超出目标长度时，先落盘已有内容
+    if (
+      current &&
+      current.length + trimmed.length + PARAGRAPH_SEPARATOR.length > TARGET_CHARS
+    ) {
+      flush(current);
       current = "";
     }
 
-    // 单个段落 > 目标字符数，按照句子分割
     if (trimmed.length > TARGET_CHARS) {
-      // 超长
-      if (current.length > 0) {
-        chunks.push(makeChunk(source, current.trim(), idx++));
+      // 超长段落：先落盘缓冲区，再按句子切分
+      if (current) {
+        flush(current);
         current = "";
       }
 
-      const sentences = trimmed.split(/(?<=[。！？.!?])\s*/);
-      let sentBuf = ""; // 句子缓冲区
+      const sentences = trimmed.split(SENTENCE_SPLIT);
+      let sentBuf = "";
       for (const sent of sentences) {
         if (
-          sentBuf.length + sent.length + 1 > TARGET_CHARS &&
-          sentBuf.length > 0
+          sentBuf &&
+          sentBuf.length + sent.length + SENTENCE_SEPARATOR.length > TARGET_CHARS
         ) {
-          chunks.push(makeChunk(source, sentBuf.trim(), idx++));
+          flush(sentBuf);
           sentBuf = "";
         }
-        sentBuf += (sentBuf ? " " : "") + sent;
+        sentBuf += (sentBuf ? SENTENCE_SEPARATOR : "") + sent;
       }
 
       if (sentBuf.trim()) {
         current += sentBuf.trim();
       }
     } else {
-      current += (current ? "\n\n" : "") + trimmed;
+      current += (current ? PARAGRAPH_SEPARATOR : "") + trimmed;
     }
   }
 
   if (current.trim()) {
-    chunks.push(makeChunk(source, current.trim(), idx++));
+    flush(current);
   }
 
   return chunks;
@@ -72,4 +82,3 @@ function makeChunk(source: string, text: string, index: number): Chunk {
     tokenEstimate: Math.ceil(text.length / CHARS_PER_TOKEN),
   };
 }
-
