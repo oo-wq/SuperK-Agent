@@ -1,30 +1,35 @@
 export type EmbeddingFn = (texts: string[]) => Promise<number[][]>;
 
-const DIMS = 128; // 嵌入维度（DashScope 要求 256~2560 之间的合法值）
+const DASHSCOPE_EMBEDDINGS_URL =
+  "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings";
+const EMBEDDING_MODEL = "text-embedding-v3";
+export const DIMS = 128; // 嵌入输出维度
+
+interface DashScopeEmbeddingResponse {
+  data: { embedding: number[] }[];
+}
 
 export function createDashScopeEmbedder(apiKey: string): EmbeddingFn {
   return async (texts: string[]) => {
-    const resp = await fetch(
-      "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "text-embedding-v3",
-          input: texts,
-          dimensions: DIMS,
-        }),
+    const resp = await fetch(DASHSCOPE_EMBEDDINGS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
-    );
-    const data = (await resp.json()) as any;
-    return data.data.map((d: any) => d.embedding as number[]);
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        input: texts,
+        dimensions: DIMS,
+      }),
+    });
+
+    const data: DashScopeEmbeddingResponse = await resp.json();
+    return data.data.map((item) => item.embedding);
   };
 }
 
-// 相同的文本没必要重复做向量处理
+// 相同文本无需重复计算向量
 const embedCache = new Map<string, number[]>();
 
 export async function embed(
@@ -54,11 +59,11 @@ export async function embed(
   return results;
 }
 
-// 计算向量之间的余弦相似度  --- 两个向量“有多像”
+// 计算两个向量之间的余弦相似度
 export function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0,
-    normA = 0,
-    normB = 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
     normA += a[i] * a[i];
@@ -66,5 +71,3 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   }
   return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
-
-export { DIMS };
