@@ -1,5 +1,5 @@
 import type { StoredChunk, VectorStore } from "./store";
-import { EmbeddingFn, cosineSimilarity, embed } from "./embedder";
+import { cosineSimilarity, embed, type EmbeddingFn } from "./embedder";
 
 export interface SearchResult {
   chunk: StoredChunk;
@@ -8,21 +8,26 @@ export interface SearchResult {
   keywordScore: number;
 }
 
-const VECTOR_WEIGHT = 0.7;
-const KEYWORD_WEIGHT = 0.3;
-const CANDIDATE_MULTIPLIER = 4; // 候选数量倍数
-const MMR_LAMBDA = 0.7; // MMR参数 70% 看相关性 30% 看多样性
+const VECTOR_WEIGHT = 0.7; // 向量检索权重
+const KEYWORD_WEIGHT = 0.3; // 关键词检索权重
+const CANDIDATE_MULTIPLIER = 4; // 候选集相对 topK 的倍数
+const MMR_LAMBDA = 0.7; // MMR 参数：70% 看相关性，30% 看多样性
 
-export async function hybridSearch( // 混合检索
+const BM25_K1 = 1.2; // BM25 词频饱和参数
+const BM25_B = 0.75; // BM25 文档长度归一化参数
+const NON_TOKEN_CHARS = /[^\w一-鿿]+/g; // 非词元字符（保留英文/数字/下划线/中文）
+
+// 混合检索：向量检索 + 关键词检索（BM25），归一化加权后做 MMR 去重
+export async function hybridSearch(
   store: VectorStore,
   embedFn: EmbeddingFn,
   query: string,
   topK: number = 5,
 ): Promise<SearchResult[]> {
-  const all = store.getAll(); // 获取所有的向量数据
-  const candidateCount = Math.min(topK * CANDIDATE_MULTIPLIER, all.length); // 候选数量倍数
+  const all = store.getAll(); // 获取所有已存储的向量
+  const candidateCount = Math.min(topK * CANDIDATE_MULTIPLIER, all.length);
 
-  // 路径1:向量检索
+  // 路径 1：向量检索
   const [queryVec] = await embed(embedFn, [query]); // 先将查询语句转成向量
   const vectorResults = all
     .map((chunk) => ({
@@ -32,20 +37,20 @@ export async function hybridSearch( // 混合检索
     .sort((a, b) => b.score - a.score)
     .slice(0, candidateCount);
 
-  // 路径2:关键词检索 (BM25)
-  const queryTerms = tokenize(query); // 对查询语句进行分词处理
-  const docCount = all.length; // 文档数量
+  // 路径 2：关键词检索（BM25）
+  const queryTerms = tokenize(query);
+  const tokenizedDocs = all.map((d) => tokenize(d.text)); // 文档分词只计算一次
   const keywordResults = all
-    .map((chunk) => ({
+    .map((chunk, i) => ({
       chunk,
-      score: bm25Score(queryTerms, chunk.text, docCount, all),
+      score: bm25Score(queryTerms, tokenizedDocs[i], tokenizedDocs),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, candidateCount);
 
-  // 归一化: 不是两种分数的和
+  // 归一化：两类分数量纲不同，需映射到同一区间后再加权
   const vecNorm = normalizeMinMax(vectorResults.map((r) => r.score));
-  const kwNorm = normalizeViaSigmoid(keywordResults.map((r) => r.score)); // 因为BM25得到的分数可能是负数，也可能是几十
+  const kwNorm = normalizeViaSigmoid(keywordResults.map((r) => r.score)); // BM25 分数可能为负或很大，用 sigmoid 映射到 (0,1)
 
   // 合并结果
   const candidates = new Map<string, SearchResult>();
@@ -75,48 +80,47 @@ export async function hybridSearch( // 混合检索
     }
   }
 
-  // 排序
   const sorted = [...candidates.values()].sort((a, b) => b.score - a.score);
 
-  // 处理数据的相关性和多样性 （防止搜到的数据有重复）
+  // MMR 去重，兼顾相关性与多样性
   return mmrSelect(sorted, topK);
 }
 
-// BM25 算文本的匹配度
+// 分词：小写化后按非词元字符切分，过滤单字符词
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^\w一-鿿]+/g, " ")
+    .replace(NON_TOKEN_CHARS, " ")
     .split(/\s+/)
     .filter((t) => t.length > 1);
 }
 
+// BM25 计算文本匹配度
 function bm25Score(
   queryTerms: string[],
-  docText: string,
-  N: number,
-  allDocs: StoredChunk[],
+  docTokens: string[],
+  allDocTokens: string[][],
 ): number {
-  const k1 = 1.2;
-  const b = 0.75;
-  const docTokens = tokenize(docText);
+  const N = allDocTokens.length;
   const avgDl =
-    allDocs.reduce((s, d) => s + tokenize(d.text).length, 0) / (N || 1);
+    allDocTokens.reduce((sum, tokens) => sum + tokens.length, 0) / (N || 1);
   const dl = docTokens.length;
   let score = 0;
 
   for (const term of queryTerms) {
     const tf = docTokens.filter((t) => t === term).length;
-    const df = allDocs.filter((d) => tokenize(d.text).includes(term)).length;
+    const df = allDocTokens.filter((tokens) => tokens.includes(term)).length;
     const idf = Math.log((N - df + 0.5) / (df + 0.5) + 1);
-    const tfNorm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl)));
+    const tfNorm =
+      (tf * (BM25_K1 + 1)) /
+      (tf + BM25_K1 * (1 - BM25_B + BM25_B * (dl / avgDl)));
     score += idf * tfNorm;
   }
 
   return score;
 }
 
-// 归一化操作
+// 归一化：min-max 缩放到 [0, 1]
 function normalizeMinMax(scores: number[]): number[] {
   if (scores.length === 0) return [];
   const min = Math.min(...scores);
@@ -125,12 +129,12 @@ function normalizeMinMax(scores: number[]): number[] {
   return scores.map((s) => (s - min) / range);
 }
 
-// 计算sigmoid函数的值，将分数映射到0到1之间，同时保持分数的相对顺序
+// 归一化：sigmoid 将分数映射到 (0, 1)，保持相对顺序
 function normalizeViaSigmoid(scores: number[]): number[] {
   return scores.map((s) => 1 / (1 + Math.exp(-s)));
 }
 
-// MMR去重
+// MMR 去重：每次选「相关性最高且与已选最不相似」的候选
 function mmrSelect(results: SearchResult[], topK: number): SearchResult[] {
   if (results.length <= topK) return results;
 
