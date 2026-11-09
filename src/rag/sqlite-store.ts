@@ -2,21 +2,56 @@ import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { Chunk } from "./chunker.js";
 import type { StoredChunk } from "./store.js";
-import { embed, type EmbeddingFn } from "./embedder";
+import { DIMS, embed, type EmbeddingFn } from "./embedder";
 import type { SearchResult } from "./search";
 
-const MMR_LAMBDA = 0.7;
+const DEFAULT_DB_PATH = "knowledge.db"; // 默认数据库文件
+const CHARS_PER_TOKEN = 4; // 每个 token 对应的字符数
+const CANDIDATE_MULTIPLIER = 4; // 候选集相对 topK 的倍数
+const VECTOR_WEIGHT = 0.7; // 向量检索权重
+const KEYWORD_WEIGHT = 0.3; // 关键词检索权重
+const MMR_LAMBDA = 0.7; // MMR 参数：70% 看相关性，30% 看多样性
+
+// 检索查询返回的行结构（embedding 以 JSON 字符串存储）
+interface ChunkRow {
+  id: string;
+  text: string;
+  source: string;
+  chunk_index: number;
+  embedding: string;
+}
+
+interface VectorRow extends ChunkRow {
+  distance: number;
+}
+
+interface KeywordRow extends ChunkRow {
+  rank: number;
+}
+
+// 将查询行映射为内存中的 StoredChunk
+function toStoredChunk(row: ChunkRow): StoredChunk {
+  return {
+    id: row.id,
+    text: row.text,
+    source: row.source,
+    index: row.chunk_index,
+    tokenEstimate: Math.ceil(row.text.length / CHARS_PER_TOKEN),
+    embedding: JSON.parse(row.embedding),
+    addedAt: 0,
+  };
+}
 
 export class SqliteVectorStore {
   private db: Database.Database;
 
-  constructor(dbPath: string = "knowledge.db") {
+  constructor(dbPath: string = DEFAULT_DB_PATH) {
     this.db = new Database(dbPath);
     sqliteVec.load(this.db); // 加载向量搜索扩展
     this.createTables();
   }
 
-  private createTables() {
+  private createTables(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS chunks (
         id TEXT PRIMARY KEY,
@@ -30,7 +65,7 @@ export class SqliteVectorStore {
 
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
         id TEXT PRIMARY KEY,
-        embedding FLOAT[128]
+        embedding FLOAT[${DIMS}]
       );
 
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -72,7 +107,7 @@ export class SqliteVectorStore {
       .run(chunk.id, chunk.text, chunk.source);
   }
 
-  addBatch(items: Array<{ chunk: Chunk; embedding: number[] }>): void {
+  addBatch(items: { chunk: Chunk; embedding: number[] }[]): void {
     const tx = this.db.transaction(() => {
       for (const { chunk, embedding } of items) this.add(chunk, embedding);
     });
@@ -82,10 +117,10 @@ export class SqliteVectorStore {
   vectorSearch(
     queryEmbedding: number[],
     topK: number,
-  ): Array<{ chunk: StoredChunk; score: number }> {
+  ): { chunk: StoredChunk; score: number }[] {
     const buf = Buffer.from(new Float32Array(queryEmbedding).buffer);
     const rows = this.db
-      .prepare(
+      .prepare<[Buffer, number], VectorRow>(
         `
       SELECT v.id, v.distance, c.text, c.source, c.chunk_index, c.embedding
       FROM chunks_vec v
@@ -95,28 +130,20 @@ export class SqliteVectorStore {
       LIMIT ?
     `,
       )
-      .all(buf, topK) as any[];
+      .all(buf, topK);
 
-    return rows.map((r) => ({
-      chunk: {
-        id: r.id,
-        text: r.text,
-        source: r.source,
-        index: r.chunk_index,
-        tokenEstimate: Math.ceil(r.text.length / 4),
-        embedding: JSON.parse(r.embedding),
-        addedAt: 0,
-      },
-      score: 1 - r.distance, // cosine distance → similarity
+    return rows.map((row) => ({
+      chunk: toStoredChunk(row),
+      score: 1 - row.distance, // cosine distance → similarity
     }));
   }
 
   keywordSearch(
     query: string,
     topK: number,
-  ): Array<{ chunk: StoredChunk; score: number }> {
+  ): { chunk: StoredChunk; score: number }[] {
     const rows = this.db
-      .prepare(
+      .prepare<[string, number], KeywordRow>(
         `
       SELECT f.id, bm25(chunks_fts) AS rank, c.text, c.source, c.chunk_index, c.embedding
       FROM chunks_fts f
@@ -126,24 +153,19 @@ export class SqliteVectorStore {
       LIMIT ?
     `,
       )
-      .all(query, topK) as any[];
+      .all(query, topK);
 
-    return rows.map((r) => ({
-      chunk: {
-        id: r.id,
-        text: r.text,
-        source: r.source,
-        index: r.chunk_index,
-        tokenEstimate: Math.ceil(r.text.length / 4),
-        embedding: JSON.parse(r.embedding),
-        addedAt: 0,
-      },
-      score: r.rank < 0 ? -r.rank / (1 - r.rank) : 1 / (1 + r.rank),
+    return rows.map((row) => ({
+      chunk: toStoredChunk(row),
+      score: row.rank < 0 ? -row.rank / (1 - row.rank) : 1 / (1 + row.rank),
     }));
   }
 
   size(): number {
-    return (this.db.prepare("SELECT COUNT(*) as n FROM chunks").get() as any).n;
+    const row = this.db
+      .prepare<[], { n: number }>("SELECT COUNT(*) AS n FROM chunks")
+      .get()!; // COUNT 始终返回一行
+    return row.n;
   }
 
   clear(): void {
@@ -153,9 +175,10 @@ export class SqliteVectorStore {
   }
 
   sources(): string[] {
-    return (
-      this.db.prepare("SELECT DISTINCT source FROM chunks").all() as any[]
-    ).map((r) => r.source);
+    const rows = this.db
+      .prepare<[], { source: string }>("SELECT DISTINCT source FROM chunks")
+      .all();
+    return rows.map((row) => row.source);
   }
 
   // 混合搜索：直接在 SQLite 层完成向量 + 关键词双路检索
@@ -164,15 +187,15 @@ export class SqliteVectorStore {
     query: string,
     topK: number = 5,
   ): Promise<SearchResult[]> {
-    const candidateCount = Math.min(topK * 4, this.size());
+    const candidateCount = Math.min(topK * CANDIDATE_MULTIPLIER, this.size());
     if (candidateCount === 0) return [];
 
     const [queryVec] = await embed(embedFn, [query]);
 
-    // 路径 1: sqlite-vec 向量搜索
+    // 路径 1：sqlite-vec 向量搜索
     const vectorResults = this.vectorSearch(queryVec, candidateCount);
 
-    // 路径 2: FTS5 关键词搜索
+    // 路径 2：FTS5 关键词搜索
     const keywordResults = this.keywordSearch(query, candidateCount);
 
     // 归一化 + 加权合并
@@ -184,7 +207,7 @@ export class SqliteVectorStore {
       const id = vectorResults[i].chunk.id;
       candidates.set(id, {
         chunk: vectorResults[i].chunk,
-        score: vecScores[i] * 0.7,
+        score: vecScores[i] * VECTOR_WEIGHT,
         vectorScore: vecScores[i],
         keywordScore: 0,
       });
@@ -194,11 +217,11 @@ export class SqliteVectorStore {
       const existing = candidates.get(id);
       if (existing) {
         existing.keywordScore = kwScores[i];
-        existing.score += kwScores[i] * 0.3;
+        existing.score += kwScores[i] * KEYWORD_WEIGHT;
       } else {
         candidates.set(id, {
           chunk: keywordResults[i].chunk,
-          score: kwScores[i] * 0.3,
+          score: kwScores[i] * KEYWORD_WEIGHT,
           vectorScore: 0,
           keywordScore: kwScores[i],
         });
@@ -207,11 +230,12 @@ export class SqliteVectorStore {
 
     const sorted = [...candidates.values()].sort((a, b) => b.score - a.score);
 
-    // MMR deduplication
+    // MMR 去重，兼顾相关性与多样性
     return mmrSelect(sorted, topK);
   }
 }
 
+// 归一化：min-max 缩放到 [0, 1]
 function normalizeMinMax(scores: number[]): number[] {
   if (scores.length === 0) return [];
   const min = Math.min(...scores);
@@ -220,7 +244,7 @@ function normalizeMinMax(scores: number[]): number[] {
   return scores.map((s) => (s - min) / range);
 }
 
-// MMR去重
+// MMR 去重：每次选「相关性最高且与已选最不相似」的候选
 function mmrSelect(results: SearchResult[], topK: number): SearchResult[] {
   if (results.length <= topK) return results;
 
@@ -260,6 +284,7 @@ function jaccardSimilarity(a: string, b: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
+// 分词：小写化后按非词元字符切分，过滤单字符词
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
