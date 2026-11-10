@@ -6,28 +6,25 @@ export interface StoredChunk extends Chunk {
 }
 
 export class VectorStore {
-  private chunks: StoredChunk[] = []; // 自己打造的向量数据库
+  private chunks: StoredChunk[] = []; // 内存向量库
 
-  add(chunk: Chunk, embedding: number[]) {
+  add(chunk: Chunk, embedding: number[]): void {
     const existing = this.chunks.findIndex((c) => c.id === chunk.id);
+    const stored: StoredChunk = {
+      ...chunk,
+      embedding,
+      addedAt: Date.now(),
+    };
     if (existing >= 0) {
-      this.chunks[existing] = {
-        ...chunk,
-        embedding,
-        addedAt: Date.now(),
-      };
+      this.chunks[existing] = stored;
     } else {
-      this.chunks.push({
-        ...chunk,
-        embedding,
-        addedAt: Date.now(),
-      });
+      this.chunks.push(stored);
     }
   }
 
-  addBatch(items: Array<{ chunk: Chunk; embedding: number[] }>): void {
-    for (const item of items) {
-      this.add(item.chunk, item.embedding);
+  addBatch(items: { chunk: Chunk; embedding: number[] }[]): void {
+    for (const { chunk, embedding } of items) {
+      this.add(chunk, embedding);
     }
   }
 
@@ -47,4 +44,3 @@ export class VectorStore {
     return [...new Set(this.chunks.map((c) => c.source))];
   }
 }
-
