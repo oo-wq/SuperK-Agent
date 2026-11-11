@@ -1,11 +1,12 @@
 export type RiskLevel = "safe" | "moderate" | "dangerous";
 
-interface ClassifyResult {
+export interface ClassifyResult {
   level: RiskLevel;
   reason?: string;
 }
 
-const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+// 高危模式：命中即判定为 dangerous
+const DANGEROUS_PATTERNS: { pattern: RegExp; reason: string }[] = [
   {
     pattern: /\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+|.*-rf\b|.*--force)/,
     reason: "强制删除文件",
@@ -23,7 +24,8 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: />\s*\/etc\//, reason: "覆写系统配置" },
 ];
 
-const MODERATE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+// 中危模式：命中即判定为 moderate
+const MODERATE_PATTERNS: { pattern: RegExp; reason: string }[] = [
   { pattern: /\brm\b/, reason: "删除文件" },
   { pattern: /\bmv\b/, reason: "移动/重命名文件" },
   { pattern: /\bchmod\b/, reason: "修改权限" },
@@ -36,6 +38,7 @@ const MODERATE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bdocker\s+rm\b/, reason: "删除容器" },
 ];
 
+// 将 Bash 命令分为 safe / moderate / dangerous 三级
 export function classifyBashCommand(command: string): ClassifyResult {
   for (const { pattern, reason } of DANGEROUS_PATTERNS) {
     if (pattern.test(command)) {
