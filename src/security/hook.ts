@@ -18,15 +18,21 @@ export type PostToolHook = (
   output: any,
 ) => HookResult | Promise<HookResult>;
 
-export class HookPipeline {
-  private preHooks: Array<{ name: string; fn: PreToolHook }> = [];
-  private postHooks: Array<{ name: string; fn: PostToolHook }> = [];
+// 将捕获的错误统一转为可读字符串
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
-  registerPre(name: string, fn: PreToolHook) {
+// 工具执行前后（pre/post）的安全 Hook 管线
+export class HookPipeline {
+  private preHooks: { name: string; fn: PreToolHook }[] = [];
+  private postHooks: { name: string; fn: PostToolHook }[] = [];
+
+  registerPre(name: string, fn: PreToolHook): void {
     this.preHooks.push({ name, fn });
   }
 
-  registerPost(name: string, fn: PostToolHook) {
+  registerPost(name: string, fn: PostToolHook): void {
     this.postHooks.push({ name, fn });
   }
 
@@ -45,8 +51,7 @@ export class HookPipeline {
           console.log(`[hook:${hook.name}] 修改了 ${toolName} 的输入`);
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[hook:${hook.name}] 执行Pre异常: ${msg}`);
+        console.error(`[hook:${hook.name}] 执行Pre异常: ${errorMessage(err)}`);
       }
     }
     return { action: "allow" };
@@ -65,8 +70,7 @@ export class HookPipeline {
           currentOutput = result.modifiedOutput;
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[hook:${hook.name}] 执行Post异常: ${msg}`);
+        console.error(`[hook:${hook.name}] 执行Post异常: ${errorMessage(err)}`);
       }
     }
     return { action: "allow", modifiedOutput: currentOutput };
