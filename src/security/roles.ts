@@ -6,13 +6,25 @@ export interface UserIdentity {
   role: Role;
 }
 
-const TOOL_ACCESS: Record<Role, { allow: string[] | "*"; deny: string[] }> = {
+// 各角色的工具访问权限
+interface ToolAccess {
+  allow: string[] | "*";
+  deny: string[];
+}
+
+// 访客角色可用的只读工具
+const GUEST_ALLOWED_TOOLS = [
+  "read_file",
+  "list_directory",
+  "glob",
+  "grep",
+  "rag_search",
+];
+
+const TOOL_ACCESS: Record<Role, ToolAccess> = {
   owner: { allow: "*", deny: [] }, // 完全访问
   collaborator: { allow: "*", deny: ["bash"] }, // 自动审批
-  guest: {
-    allow: ["read_file", "list_directory", "glob", "grep", "rag_search"],
-    deny: ["bash"],
-  }, // 手动审批
+  guest: { allow: GUEST_ALLOWED_TOOLS, deny: ["bash"] }, // 手动审批
 };
 
 export function canUseTool(role: Role, toolName: string): boolean {
